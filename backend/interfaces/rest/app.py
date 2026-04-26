@@ -4,6 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import get_settings
+from backend.domain.errors import BudgetCapExceeded
+from backend.interfaces.rest.exception_handlers import handle_budget_cap_exceeded
 from backend.interfaces.rest.routers import health, stocks
 
 
@@ -36,6 +38,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    app.add_exception_handler(BudgetCapExceeded, handle_budget_cap_exceeded)  # type: ignore[arg-type]
 
     app.include_router(health.router)
     app.include_router(stocks.router)
