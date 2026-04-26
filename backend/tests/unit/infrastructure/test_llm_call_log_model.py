@@ -38,13 +38,15 @@ class TestLLMCallLogTable:
 
     def test_created_at_is_timezone_aware(self) -> None:
         col = LLMCallLogORM.__table__.c.created_at
-        assert col.type.timezone is True
+        # SQLAlchemy DateTime exposes `timezone` at runtime; mypy doesn't see
+        # the concrete type because __table__.c returns generic Column[Any].
+        assert col.type.timezone is True  # type: ignore[attr-defined]
 
     def test_cost_usd_uses_numeric_with_correct_precision(self) -> None:
         # NUMERIC(10, 6) per Spec §3 — Decimal, nie Float
         col = LLMCallLogORM.__table__.c.cost_usd
-        assert col.type.precision == 10
-        assert col.type.scale == 6
+        assert col.type.precision == 10  # type: ignore[attr-defined]
+        assert col.type.scale == 6  # type: ignore[attr-defined]
 
     def test_required_fields_are_not_nullable(self) -> None:
         for required in (
@@ -66,6 +68,6 @@ class TestLLMCallLogTable:
         # Cap-Check-Query filtert nach created_at — ohne Index wird das langsam
         index_columns = [
             tuple(c.name for c in idx.columns)
-            for idx in LLMCallLogORM.__table__.indexes
+            for idx in LLMCallLogORM.__table__.indexes  # type: ignore[attr-defined]
         ]
         assert ("created_at",) in index_columns

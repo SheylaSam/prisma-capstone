@@ -95,9 +95,7 @@ class CostTracker:
         await self._session.commit()
 
     @staticmethod
-    def _compute_cost_usd(
-        model: str, input_tokens: int, output_tokens: int
-    ) -> Decimal:
+    def _compute_cost_usd(model: str, input_tokens: int, output_tokens: int) -> Decimal:
         """Token-Counts → Kosten in USD via PRICING-Registry.
 
         Embedding-Modelle (embed_per_mtok ist gesetzt) verwenden nur
