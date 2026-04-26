@@ -1,5 +1,6 @@
 """Application-wide settings loaded from environment variables or a .env file."""
 
+from decimal import Decimal
 from functools import lru_cache
 from typing import Annotated
 
@@ -33,6 +34,9 @@ class Settings(BaseSettings):
 
     api_key: str = "change-me"
 
+    budget_cap_usd: Decimal = Decimal("20.00")
+    budget_cap_threshold: Decimal = Decimal("0.95")
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, value: object) -> list[str]:
@@ -43,6 +47,17 @@ class Settings(BaseSettings):
         if isinstance(value, list):
             return [str(item) for item in value]
         raise TypeError(f"cannot parse cors_origins from {type(value).__name__}")
+
+    @field_validator("budget_cap_threshold", mode="before")
+    @classmethod
+    def validate_budget_cap_threshold(cls, value: object) -> object:
+        """Stellt sicher, dass budget_cap_threshold im Bereich [0, 1] liegt."""
+        decimal_value = Decimal(str(value))
+        if not (Decimal("0") <= decimal_value <= Decimal("1")):
+            raise ValueError(
+                f"budget_cap_threshold muss zwischen 0 und 1 liegen, erhalten: {value}"
+            )
+        return value
 
 
 @lru_cache

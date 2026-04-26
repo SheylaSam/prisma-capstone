@@ -1,12 +1,13 @@
-"""CostTracker — Application-Service für Cap-Checks und Cost-Recording.
+"""CostTracker — Application-Service für Cap-Checks, Cost-Recording und Summary.
 
-Spezifiziert in `docs/specs/2026-04-25-budget-cap.md` §5.
+Spezifiziert in `docs/specs/2026-04-25-budget-cap.md` §5 + §9.
 
 Wird vom `LLMClient`-Wrapper in der Infrastructure-Schicht aufgerufen:
 - `check_cap(estimated_usd)` vor jedem LLM-Call: wirft `BudgetCapExceeded`,
   wenn das Monats-Budget um die Schätzung überschritten würde
 - `record(...)` nach jedem erfolgreichen Call: berechnet Kosten aus Tokens
   und schreibt eine Audit-Zeile in `llm_call_log`
+- `summary(last_n)` liefert aggregierte Kosten-Übersicht für den Admin-Endpoint
 
 Concurrency: ein kleines Race-Window existiert (zwei parallele Calls passen
 beide `check_cap` und schreiben dann beide `record`). Bei Capstone-Volumen
@@ -14,6 +15,8 @@ beide `check_cap` und schreiben dann beide `record`). Bei Capstone-Volumen
 Spend-Limit ist Backstop.
 """
 
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import text
@@ -24,6 +27,48 @@ from backend.infrastructure.llm.pricing import PRICING
 from backend.infrastructure.persistence.models.llm_call_log import LLMCallLogORM
 
 
+# ---------------------------------------------------------------------------
+# Dataclasses für CostSummary
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ModelBreakdown:
+    model: str
+    calls: int
+    cost_usd: Decimal
+
+
+@dataclass(frozen=True)
+class FeatureBreakdown:
+    feature: str
+    calls: int
+    cost_usd: Decimal
+
+
+@dataclass(frozen=True)
+class CallEntry:
+    created_at: datetime
+    model: str
+    feature: str
+    cost_usd: Decimal
+
+
+@dataclass(frozen=True)
+class CostSummary:
+    month: str  # "YYYY-MM"
+    cap_usd: Decimal
+    current_usd: Decimal
+    remaining_usd: Decimal  # max(cap - current, 0)
+    by_model: list[ModelBreakdown]
+    by_feature: list[FeatureBreakdown]
+    last_calls: list[CallEntry]
+
+
+# ---------------------------------------------------------------------------
+# SQL-Queries (module-level Konstanten)
+# ---------------------------------------------------------------------------
+
 # SQL-Query für Monatskosten (Kalender-Monat UTC, synchron mit Anthropic
 # Console Spend-Limit). Kein ORM-Layer für diesen Performance-kritischen Pfad.
 _CURRENT_MONTH_SUM_SQL = text(
@@ -33,6 +78,42 @@ _CURRENT_MONTH_SUM_SQL = text(
     WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'UTC')
       AND created_at <  date_trunc('month', now() AT TIME ZONE 'UTC')
                          + INTERVAL '1 month'
+    """
+)
+
+_BY_MODEL_SQL = text(
+    """
+    SELECT model, COUNT(*) AS calls, SUM(cost_usd) AS cost_usd
+    FROM llm_call_log
+    WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'UTC')
+      AND created_at <  date_trunc('month', now() AT TIME ZONE 'UTC')
+                         + INTERVAL '1 month'
+    GROUP BY model
+    ORDER BY cost_usd DESC
+    """
+)
+
+_BY_FEATURE_SQL = text(
+    """
+    SELECT feature, COUNT(*) AS calls, SUM(cost_usd) AS cost_usd
+    FROM llm_call_log
+    WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'UTC')
+      AND created_at <  date_trunc('month', now() AT TIME ZONE 'UTC')
+                         + INTERVAL '1 month'
+    GROUP BY feature
+    ORDER BY cost_usd DESC
+    """
+)
+
+_LAST_CALLS_SQL = text(
+    """
+    SELECT created_at, model, feature, cost_usd
+    FROM llm_call_log
+    WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'UTC')
+      AND created_at <  date_trunc('month', now() AT TIME ZONE 'UTC')
+                         + INTERVAL '1 month'
+    ORDER BY created_at DESC
+    LIMIT :limit
     """
 )
 
@@ -93,6 +174,66 @@ class CostTracker:
         )
         self._session.add(entry)
         await self._session.commit()
+
+    async def summary(self, *, last_n: int = 10) -> CostSummary:
+        """Liefert aggregierte Kosten-Übersicht für den aktuellen Kalender-Monat UTC.
+
+        Drei SQL-Queries: SUM für cap-Status, GROUP BY model, GROUP BY feature,
+        LIMIT :limit für letzte Calls. Spezifiziert in §9.
+        """
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
+        current_usd = await self._current_month_usd()
+        cap_usd = self._cap_usd
+        remaining_usd = max(cap_usd - current_usd, Decimal("0"))
+
+        model_result = await self._session.execute(_BY_MODEL_SQL)
+        by_model = sorted(
+            [
+                ModelBreakdown(
+                    model=row.model,
+                    calls=row.calls,
+                    cost_usd=Decimal(str(row.cost_usd)),
+                )
+                for row in model_result.fetchall()
+            ],
+            key=lambda b: b.cost_usd,
+            reverse=True,
+        )
+
+        feature_result = await self._session.execute(_BY_FEATURE_SQL)
+        by_feature = sorted(
+            [
+                FeatureBreakdown(
+                    feature=row.feature,
+                    calls=row.calls,
+                    cost_usd=Decimal(str(row.cost_usd)),
+                )
+                for row in feature_result.fetchall()
+            ],
+            key=lambda b: b.cost_usd,
+            reverse=True,
+        )
+
+        last_result = await self._session.execute(_LAST_CALLS_SQL, {"limit": last_n})
+        last_calls = [
+            CallEntry(
+                created_at=row.created_at,
+                model=row.model,
+                feature=row.feature,
+                cost_usd=Decimal(str(row.cost_usd)),
+            )
+            for row in last_result.fetchall()
+        ]
+
+        return CostSummary(
+            month=month,
+            cap_usd=cap_usd,
+            current_usd=current_usd,
+            remaining_usd=remaining_usd,
+            by_model=by_model,
+            by_feature=by_feature,
+            last_calls=last_calls,
+        )
 
     @staticmethod
     def _compute_cost_usd(model: str, input_tokens: int, output_tokens: int) -> Decimal:
