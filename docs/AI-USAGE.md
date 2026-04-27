@@ -18,6 +18,24 @@ Pro PR mit substantieller Agent-Beteiligung ein Eintrag:
 
 ## Einträge
 
+## 2026-04-27 · Quant-Models-Redesign (PR #26, Commits `7f93095` bis `d62e719`)
+- **Agent**: Claude Code (Opus 4.7) + 1 Recherche-Sub-Agent (claude-code-guide) für Daten-Feasibility-Check
+- **Scope**: Quality AI + Anti-Cyclical aus dem MVP entfernen, Trend Momentum + Value Alpha Potential rein. Spec geschrieben (`2026-04-27-quant-models-redesign.md`, 237 Z.), ADR 0005 (90 Z.), Design-Spec/README/Frontend/Narrative-Engine/MCP-Spec konsistent durchpatcht (5 Files, 45 +/− 34), Skeleton-Domain-Code für 5 Modelle + 22 grüne / 7 skipped Tests, env-Migration `FINNHUB_API_KEY` → `FMP_API_KEY` im `.env.example`. Alles auf Feature-Branch, PR #26 für Review offen.
+- **Was gut lief**:
+  - Spec-First-Disziplin gehalten: nach erstem Plan-Vorschlag mehrfach iteriert (5→4→5 Modelle, FMP-Free vs. Starter, Diversification rein/raus), bevor erste Codezeile geschrieben wurde. Vier Iterationen Daten-Feasibility hatten direkten Einfluss auf den finalen Modell-Mix — Schreiben wäre ohne diese Vorarbeit Nacharbeit gewesen.
+  - Sub-Agent für Recherche zu Yahoo/FMP-Tier-Limits, statt Trainingswissen zu erraten — die "FMP Free liefert kein Historical"-Erkenntnis war der entscheidende Punkt, der Quality AI gekippt hat.
+  - mypy-strict + ruff im Skeleton ohne Workarounds clean — beim ersten Versuch flaggte mypy ein `# type: ignore[arg-type]`, das durch ein `model_validate({...})` ersetzt wurde (saubere Lösung statt Stummschaltung).
+  - PR-Disziplin: nach Initial-Commit auf `main` korrigiert, alles auf Feature-Branch verlagert, PR mit Test-Plan und To-Do-Liste angelegt — User behielt jederzeit Review-Kontrolle.
+- **Was nicht klappte**:
+  1. **Erster Commit ging direkt auf `main`.** AGENTS.md §4 verlangt PR-only — Verstoss innerhalb 5 Min nach Spec-Commit. User hat's gemerkt, ich habe per `git reset --soft HEAD~1` den Commit aus `main` entfernt und auf `feat/quant-models-redesign` verschoben. Lehre: **Branch-Strategie vor erstem Commit aktiv prüfen, nicht nach gut Glück auf Default-Branch arbeiten.**
+  2. **PowerShell-PATH-Falle nach `winget install gh`.** `gh.exe` lag installiert da, aber die laufende PowerShell-Session kannte den PATH-Eintrag nicht — drei Iterationen mit User, bis ich die Diagnose machte.
+  3. **Daten-Feasibility-Check kam zu spät.** Die ersten zwei Konversations-Runden hätten direkt klären müssen, dass Quality AI mit FMP Free nicht geht.
+  4. **`.env`-Editier-Konflikt.** Beim Migrieren der lokalen `.env` hatte der User das File parallel selbst editiert.
+- **Nachbearbeitung**: keine bisher; PR ist offen, hängt an menschlichem Review.
+- **Methodisches Mini-Learning**: **Spec-First spart eindeutig — aber Spec-First UND Branch-First muss als gemeinsamer Reflex sitzen.**
+- **Token-Kosten**: ~120k Tokens (Opus 4.7 + 1 Sub-Agent-Call à ~12k); etwa 4 USD.
+- **Autor**: Fabia Holzer (mit Claude Code)
+
 ## 2026-04-26 · #19 Implementation — Build-Steps 6-8 (PR #25, Continuation)
 - **Agents**: Claude Code (Opus 4.7) im Haupt-Context für Wave 6 (LLMClient) + Wave 7 (Exception-Handler); 1 Sub-Agent (Sonnet 4.6) für Wave 8 (Admin-Endpoint, weil grösserer Scope mit 9 Files + 11 Tests). Bewusste Routing-Entscheidung: Tight-Loop-TDD bleibt im Haupt-Context, gut-spezifizierte Multi-File-Bauarbeit geht an den Subagent.
 - **Scope**: Drei zusätzliche Build-Steps in derselben PR #25 statt Stacked-PR oder Self-Merge nach 2 h Review-Stille. `LLMClient`-Wrapper für Anthropic + Voyage mit chars/4-Estimation und SDK-fan-out, `BudgetCapExceeded`-FastAPI-Handler mit `Retry-After`-Header (Sekunden bis Monatswechsel UTC), `GET /api/v1/admin/costs`-Endpoint mit X-API-Key-Auth (constant-time compare) + Pydantic-Response-Schema + neue Env-Vars (`BUDGET_CAP_USD`, `BUDGET_CAP_THRESHOLD`). 86 Tests gesamt (war 75; +11 neue), Mypy + Ruff clean. PR #25 enthält jetzt Build-Steps 1-8 von 11.

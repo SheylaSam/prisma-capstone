@@ -8,7 +8,7 @@ PRISMA zerlegt Aktien in analytische Dimensionen — wie ein optisches Prisma we
 
 ## Features
 
-- **Quant Core**: 5 Modelle (Quality Classic, Quality AI / Lasso, Alpha, Anti-Cyclical, Diversification / Ledoit-Wolf)
+- **Quant Core**: 5 Modelle (Quality Classic, Alpha, Trend Momentum / EWMA, Value Alpha Potential, Diversification / Ledoit-Wolf)
 - **Narrative Engine**: LLM-generierte, strukturierte Research-Memos (Claude API + Pydantic-Schema)
 - **Multi-Agent Deep-Dive**: Fundamentals / Sentiment / Synthesizer-Agenten für Top-10
 - **MCP-Server**: PRISMA als Tool aus Claude Desktop nutzbar
@@ -61,7 +61,15 @@ npm install
 npm run dev
 ```
 
-Ausführliche Setup-Anleitung + Troubleshooting in [`docs/getting-started.md`](./docs/getting-started.md) (folgt in Woche 2).
+Ausführliche Setup-Anleitung + Troubleshooting: **[docs/getting-started.md](./docs/getting-started.md)**
+
+## Demo-Daten
+
+```bash
+python scripts/seed_demo_universe.py   # legt "Demo-US-5" mit AAPL/MSFT/GOOGL/NVDA/JPM an
+```
+
+Idempotent — mehrfaches Ausführen erzeugt keine Duplikate.
 
 ## Testen
 
