@@ -26,8 +26,11 @@ class TestWeightConfig:
     def test_equal_factory(self) -> None:
         wc = WeightConfig.equal()
         assert set(wc.weights.keys()) == {
-            "quality_classic", "alpha", "trend_momentum",
-            "value_alpha_potential", "diversification",
+            "quality_classic",
+            "alpha",
+            "trend_momentum",
+            "value_alpha_potential",
+            "diversification",
         }
         assert abs(sum(wc.weights.values()) - 1.0) < 1e-6
 
