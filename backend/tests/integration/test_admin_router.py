@@ -89,16 +89,12 @@ async def admin_http_client() -> AsyncGenerator[AsyncClient, None]:
 
 
 class TestAdminCostsEndpoint:
-    async def test_returns_401_without_api_key_header(
-        self, admin_http_client: AsyncClient
-    ) -> None:
+    async def test_returns_401_without_api_key_header(self, admin_http_client: AsyncClient) -> None:
         """Request ohne X-API-Key muss 401 liefern."""
         response = await admin_http_client.get("/api/v1/admin/costs")
         assert response.status_code == 401
 
-    async def test_returns_401_with_wrong_api_key(
-        self, admin_http_client: AsyncClient
-    ) -> None:
+    async def test_returns_401_with_wrong_api_key(self, admin_http_client: AsyncClient) -> None:
         """Request mit falschem X-API-Key muss 401 liefern."""
         response = await admin_http_client.get(
             "/api/v1/admin/costs",
@@ -106,9 +102,7 @@ class TestAdminCostsEndpoint:
         )
         assert response.status_code == 401
 
-    async def test_returns_200_with_correct_api_key(
-        self, admin_http_client: AsyncClient
-    ) -> None:
+    async def test_returns_200_with_correct_api_key(self, admin_http_client: AsyncClient) -> None:
         """Request mit korrektem X-API-Key (Default 'change-me') muss 200 liefern."""
         response = await admin_http_client.get(
             "/api/v1/admin/costs",
@@ -154,23 +148,15 @@ class TestAdminCostsEndpoint:
         assert len(data["by_feature"]) == 2
         assert len(data["last_calls"]) == 1
 
-    async def test_last_query_param_validates_range(
-        self, admin_http_client: AsyncClient
-    ) -> None:
+    async def test_last_query_param_validates_range(self, admin_http_client: AsyncClient) -> None:
         """?last=0 und ?last=101 müssen 422 liefern; ?last=10 muss 200 liefern."""
         headers = {"X-API-Key": "change-me"}
 
-        response_zero = await admin_http_client.get(
-            "/api/v1/admin/costs?last=0", headers=headers
-        )
+        response_zero = await admin_http_client.get("/api/v1/admin/costs?last=0", headers=headers)
         assert response_zero.status_code == 422
 
-        response_over = await admin_http_client.get(
-            "/api/v1/admin/costs?last=101", headers=headers
-        )
+        response_over = await admin_http_client.get("/api/v1/admin/costs?last=101", headers=headers)
         assert response_over.status_code == 422
 
-        response_ok = await admin_http_client.get(
-            "/api/v1/admin/costs?last=10", headers=headers
-        )
+        response_ok = await admin_http_client.get("/api/v1/admin/costs?last=10", headers=headers)
         assert response_ok.status_code == 200

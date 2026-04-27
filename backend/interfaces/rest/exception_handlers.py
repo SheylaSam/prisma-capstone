@@ -59,10 +59,7 @@ async def handle_budget_cap_exceeded(
         headers={"Retry-After": str(_seconds_until_next_month_utc())},
         content={
             "error": "budget_cap_exceeded",
-            "message": (
-                "Monatliches AI-Budget erschöpft. "
-                "Reset am 1. des nächsten Monats."
-            ),
+            "message": ("Monatliches AI-Budget erschöpft. Reset am 1. des nächsten Monats."),
             "current_usd": float(exc.current_usd),
             "cap_usd": float(exc.cap_usd),
         },

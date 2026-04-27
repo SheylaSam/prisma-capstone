@@ -33,9 +33,7 @@ def _fake_anthropic_response(
     )
 
 
-def _fake_voyage_response(
-    *, total_tokens: int = 42, dim: int = 4
-) -> Any:
+def _fake_voyage_response(*, total_tokens: int = 42, dim: int = 4) -> Any:
     """Imitiert die Felder, die LLMClient aus einer Voyage-Embeddings-Response liest."""
     return SimpleNamespace(
         embeddings=[[0.1] * dim, [0.2] * dim],
@@ -67,9 +65,7 @@ def _build_client(
     if voyage_raises is not None:
         voyage.embed = Mock(side_effect=voyage_raises)
     else:
-        voyage.embed = Mock(
-            return_value=voyage_response or _fake_voyage_response()
-        )
+        voyage.embed = Mock(return_value=voyage_response or _fake_voyage_response())
 
     tracker = Mock()
     if check_cap_raises is not None:

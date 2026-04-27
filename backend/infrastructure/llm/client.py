@@ -91,14 +91,10 @@ class LLMClient:
         """
         pricing = PRICING[model]
         if pricing.embed_per_mtok is None:
-            raise ValueError(
-                f"Modell {model!r} hat kein embed-Pricing — verwende messages_create"
-            )
+            raise ValueError(f"Modell {model!r} hat kein embed-Pricing — verwende messages_create")
 
         chars = sum(len(t) for t in texts)
-        estimated_usd = (
-            Decimal(chars // 4) * pricing.embed_per_mtok / _ONE_MILLION
-        )
+        estimated_usd = Decimal(chars // 4) * pricing.embed_per_mtok / _ONE_MILLION
         await self._cost_tracker.check_cap(estimated_usd=estimated_usd)
 
         # Voyage Python SDK ist synchron; in den Thread-Pool auslagern,

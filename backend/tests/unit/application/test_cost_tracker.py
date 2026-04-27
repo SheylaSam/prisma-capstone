@@ -34,9 +34,7 @@ def _make_tracker(
 
 
 class TestCheckCap:
-    async def test_below_threshold_does_not_raise(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_below_threshold_does_not_raise(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # cap=100, threshold=0.95 → Schwelle bei 95.00.
         # current 94.99 + estimate 0.01 = 95.00 → exakt an Schwelle, nicht >.
         tracker = _make_tracker()
@@ -59,9 +57,7 @@ class TestCheckCap:
         # 95.00 + 0.00 = 95.00 → nicht > 95.00, also kein Fehler
         await tracker.check_cap(estimated_usd=Decimal("0.00"))
 
-    async def test_just_above_threshold_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_just_above_threshold_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         tracker = _make_tracker()
         monkeypatch.setattr(
             tracker,
@@ -72,9 +68,7 @@ class TestCheckCap:
         with pytest.raises(BudgetCapExceeded):
             await tracker.check_cap(estimated_usd=Decimal("0.01"))
 
-    async def test_far_above_threshold_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_far_above_threshold_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         tracker = _make_tracker()
         monkeypatch.setattr(
             tracker,
@@ -84,9 +78,7 @@ class TestCheckCap:
         with pytest.raises(BudgetCapExceeded):
             await tracker.check_cap(estimated_usd=Decimal("0.60"))
 
-    async def test_exception_carries_correct_amounts(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_exception_carries_correct_amounts(self, monkeypatch: pytest.MonkeyPatch) -> None:
         tracker = _make_tracker()
         monkeypatch.setattr(
             tracker,
@@ -122,9 +114,7 @@ class TestRecord:
         session.commit = AsyncMock()
         return session
 
-    async def test_creates_log_entry_for_chat_model(
-        self, captured_session: Mock
-    ) -> None:
+    async def test_creates_log_entry_for_chat_model(self, captured_session: Mock) -> None:
         tracker = CostTracker(
             session=captured_session,
             cap_usd=Decimal("100.00"),
@@ -151,9 +141,7 @@ class TestRecord:
         assert entry.request_id == "msg_abc"
         captured_session.commit.assert_called_once()
 
-    async def test_creates_log_entry_for_embed_model(
-        self, captured_session: Mock
-    ) -> None:
+    async def test_creates_log_entry_for_embed_model(self, captured_session: Mock) -> None:
         tracker = CostTracker(
             session=captured_session,
             cap_usd=Decimal("100.00"),
@@ -199,9 +187,7 @@ def _make_session_with_results(*results: object) -> Mock:
     session = Mock()
     side_effects = list(results)
     execute_results = [AsyncMock(return_value=r) for r in side_effects]
-    session.execute = Mock(
-        side_effect=[r() for r in [lambda r=r: r for r in execute_results]]
-    )
+    session.execute = Mock(side_effect=[r() for r in [lambda r=r: r for r in execute_results]])
 
     async def _execute(query, params=None):
         # Gibt die nächste vorgefertigte Antwort zurück
@@ -242,9 +228,7 @@ def _make_row(
 
 
 class TestSummary:
-    def _make_tracker_with_session(
-        self, session: Mock, cap: str = "100.00"
-    ) -> CostTracker:
+    def _make_tracker_with_session(self, session: Mock, cap: str = "100.00") -> CostTracker:
         return CostTracker(
             session=session,
             cap_usd=Decimal(cap),
