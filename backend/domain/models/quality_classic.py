@@ -36,7 +36,7 @@ class QualityClassicModel:
     name: str = "quality_classic"
     category: Literal["Quality", "Trend", "Value", "Risk"] = "Quality"
 
-    def run(self, fundamentals: UniverseData) -> list[ModelRankingResult]:  # type: ignore[override]
+    def run(self, fundamentals: UniverseData) -> list[ModelRankingResult]:
         """Berechnet Quality-Classic-Ränge für alle Tickers im Universum.
 
         Args:
@@ -101,8 +101,8 @@ def _rank(scores: dict[str, float | None]) -> list[ModelRankingResult]:
             current_rank = i + 1
         results.append(ModelRankingResult(ticker=ticker, score=score, rank=current_rank))
 
-    for ticker, score in scores.items():
-        if score is None:
+    for ticker, s in scores.items():
+        if s is None:
             results.append(
                 ModelRankingResult(ticker=ticker, score=None, rank=None, confidence="low")
             )
