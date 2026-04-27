@@ -185,16 +185,7 @@ def _make_session_with_results(*results: object) -> Mock:
     Jedes result-Objekt wird direkt als Rückgabewert von await execute() gesetzt.
     """
     session = Mock()
-    side_effects = list(results)
-    execute_results = [AsyncMock(return_value=r) for r in side_effects]
-    session.execute = Mock(side_effect=[r() for r in [lambda r=r: r for r in execute_results]])
-
-    async def _execute(query, params=None):
-        # Gibt die nächste vorgefertigte Antwort zurück
-        return session._execute_iter.__next__()
-
-    session._execute_iter = iter(side_effects)
-    session.execute = AsyncMock(side_effect=list(side_effects))
+    session.execute = AsyncMock(side_effect=list(results))
     return session
 
 
@@ -205,7 +196,7 @@ def _make_scalar_result(value: object) -> Mock:
     return m
 
 
-def _make_fetchall_result(rows: list) -> Mock:
+def _make_fetchall_result(rows: list[object]) -> Mock:
     """Mock für .fetchall()-fähige Execute-Antwort."""
     m = Mock()
     m.fetchall = Mock(return_value=rows)
