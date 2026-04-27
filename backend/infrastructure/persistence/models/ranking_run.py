@@ -19,5 +19,5 @@ class RankingRunORM(Base):
         UUID(as_uuid=True), ForeignKey("universes.id"), nullable=False
     )
     # WeightConfig als JSONB: {"quality_classic": 0.20, "alpha": 0.20, ...}
-    weight_config: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    weight_config: Mapped[dict[str, float]] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
