@@ -47,7 +47,7 @@ class TestWeightConfig:
     def test_weight_config_is_immutable(self) -> None:
         wc = WeightConfig(weights=VALID_WEIGHTS)
         with pytest.raises((ValidationError, TypeError)):
-            wc.weights = {}  # type: ignore[misc]
+            wc.weights = {}
 
 
 class TestUniverse:
@@ -77,4 +77,4 @@ class TestUniverse:
     def test_universe_is_immutable(self) -> None:
         u = self._make()
         with pytest.raises((ValidationError, TypeError)):
-            u.name = "DAX"  # type: ignore[misc]
+            u.name = "DAX"

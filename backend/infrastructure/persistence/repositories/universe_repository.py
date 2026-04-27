@@ -44,5 +44,5 @@ class SQLAUniverseRepository(UniverseRepository):
             id=orm.id,
             name=orm.name,
             region=orm.region,
-            tickers=orm.tickers,
+            tickers=tuple(orm.tickers),
         )

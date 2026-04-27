@@ -41,4 +41,4 @@ class TestRankingRun:
     def test_ranking_run_is_immutable(self) -> None:
         run = _make_run()
         with pytest.raises((ValidationError, TypeError)):
-            run.status = "completed"  # type: ignore[misc]
+            run.status = "completed"
