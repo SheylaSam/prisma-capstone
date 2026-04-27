@@ -25,12 +25,14 @@ class SQLAUniverseRepository(UniverseRepository):
     async def save(self, universe: Universe) -> None:
         row = await self._session.get(UniverseORM, universe.id)
         if row is None:
-            self._session.add(UniverseORM(
-                id=universe.id,
-                name=universe.name,
-                region=universe.region,
-                tickers=list(universe.tickers),
-            ))
+            self._session.add(
+                UniverseORM(
+                    id=universe.id,
+                    name=universe.name,
+                    region=universe.region,
+                    tickers=list(universe.tickers),
+                )
+            )
         else:
             row.name = universe.name
             row.region = universe.region

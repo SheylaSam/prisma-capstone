@@ -22,13 +22,15 @@ class SQLARankingRunRepository(RankingRunRepository):
     async def save(self, run: RankingRun) -> None:
         row = await self._session.get(RankingRunORM, run.id)
         if row is None:
-            self._session.add(RankingRunORM(
-                id=run.id,
-                created_at=run.created_at,
-                universe_id=run.universe_id,
-                weight_config=run.weight_config.weights,
-                status=run.status,
-            ))
+            self._session.add(
+                RankingRunORM(
+                    id=run.id,
+                    created_at=run.created_at,
+                    universe_id=run.universe_id,
+                    weight_config=run.weight_config.weights,
+                    status=run.status,
+                )
+            )
         else:
             row.status = run.status
 
