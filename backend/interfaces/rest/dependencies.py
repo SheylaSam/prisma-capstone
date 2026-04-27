@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.application.services.cost_tracker import CostTracker
 from backend.application.services.stock_service import StockService
-from backend.config import get_settings
+from backend.config import Settings, get_settings
 from backend.domain.repositories.cost_log_repository import CostLogRepository
 from backend.domain.repositories.stock_repository import StockRepository
 from backend.infrastructure.persistence.repositories.cost_log_repository import (
@@ -56,9 +56,9 @@ async def get_cost_log_repository() -> CostLogRepository:
 
 async def get_cost_tracker(
     repository: CostLogRepository = Depends(get_cost_log_repository),
+    settings: Settings = Depends(get_settings),
 ) -> CostTracker:
     """Konstruiert einen CostTracker mit Settings-gespeisten Cap-Werten."""
-    settings = get_settings()
     return CostTracker(
         repository=repository,
         cap_usd=settings.budget_cap_usd,
@@ -68,12 +68,19 @@ async def get_cost_tracker(
 
 async def require_admin_api_key(
     x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    settings: Settings = Depends(get_settings),
 ) -> None:
     """Vergleicht den eingehenden X-API-Key konstant-zeitsicher mit Settings.api_key.
 
+    Settings via Depends → Tests können `app.dependency_overrides[get_settings]`
+    nutzen, statt am Production-Default zu hängen.
+
     Fehlendes oder falsches Header liefert 401 (nicht 422), damit kein
-    Information-Leak über die erwartete Header-Struktur entsteht.
+    Information-Leak über die erwartete Header-Struktur entsteht. Ein leerer
+    `settings.api_key` wird ebenfalls als 401 behandelt — kein gültiger Key
+    kann leer sein.
     """
-    settings = get_settings()
+    if not settings.api_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
     if x_api_key is None or not hmac.compare_digest(x_api_key, settings.api_key):
         raise HTTPException(status_code=401, detail="Invalid API key")

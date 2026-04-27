@@ -13,6 +13,7 @@ from decimal import Decimal
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from backend.config import Settings, get_settings
 from backend.domain.cost_summary import (
     CallEntry,
     CostSummary,
@@ -22,6 +23,11 @@ from backend.domain.cost_summary import (
 from backend.interfaces.rest.app import create_app
 from backend.interfaces.rest.dependencies import get_cost_tracker, get_stock_repository
 from backend.tests.conftest import InMemoryStockRepository, _make_sample_stocks
+
+# Fester Test-API-Key — entkoppelt die Tests vom Production-Default in
+# config.py. Tests senden diesen Key, der Override unten injiziert ihn
+# in die FastAPI-Dependency-Chain.
+_TEST_API_KEY = "test-admin-key-for-integration-tests"
 
 # ---------------------------------------------------------------------------
 # FakeCostTracker
@@ -65,9 +71,12 @@ class FakeCostTracker:
 
 @pytest_asyncio.fixture
 async def admin_http_client() -> AsyncGenerator[AsyncClient, None]:
-    """AsyncClient mit FakeCostTracker- und InMemoryStockRepository-Overrides.
+    """AsyncClient mit FakeCostTracker-, InMemoryStockRepository- und
+    Test-Settings-Overrides.
 
     Keine echte DB-Verbindung — geeignet für HTTP-Layer-Tests des Admin-Endpoints.
+    Der Settings-Override garantiert, dass der API-Key-Auth-Pfad gegen einen
+    festen Test-Key prüft, nicht gegen `.env` oder Production-Defaults.
     """
     app = create_app()
 
@@ -75,8 +84,11 @@ async def admin_http_client() -> AsyncGenerator[AsyncClient, None]:
     for stock in _make_sample_stocks():
         repo.add(stock)
 
+    test_settings = Settings(api_key=_TEST_API_KEY)
+
     app.dependency_overrides[get_stock_repository] = lambda: repo
     app.dependency_overrides[get_cost_tracker] = lambda: FakeCostTracker()
+    app.dependency_overrides[get_settings] = lambda: test_settings
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -103,10 +115,10 @@ class TestAdminCostsEndpoint:
         assert response.status_code == 401
 
     async def test_returns_200_with_correct_api_key(self, admin_http_client: AsyncClient) -> None:
-        """Request mit korrektem X-API-Key (Default 'change-me') muss 200 liefern."""
+        """Request mit korrektem X-API-Key (Test-Override) muss 200 liefern."""
         response = await admin_http_client.get(
             "/api/v1/admin/costs",
-            headers={"X-API-Key": "change-me"},
+            headers={"X-API-Key": _TEST_API_KEY},
         )
         assert response.status_code == 200
 
@@ -116,7 +128,7 @@ class TestAdminCostsEndpoint:
         """Response muss alle Top-Level-Keys mit korrekten Typen enthalten."""
         response = await admin_http_client.get(
             "/api/v1/admin/costs",
-            headers={"X-API-Key": "change-me"},
+            headers={"X-API-Key": _TEST_API_KEY},
         )
         assert response.status_code == 200
         data = response.json()
@@ -150,7 +162,7 @@ class TestAdminCostsEndpoint:
 
     async def test_last_query_param_validates_range(self, admin_http_client: AsyncClient) -> None:
         """?last=0 und ?last=101 müssen 422 liefern; ?last=10 muss 200 liefern."""
-        headers = {"X-API-Key": "change-me"}
+        headers = {"X-API-Key": _TEST_API_KEY}
 
         response_zero = await admin_http_client.get("/api/v1/admin/costs?last=0", headers=headers)
         assert response_zero.status_code == 422
