@@ -3,7 +3,7 @@
 **Status: Draft v1.1 — 2026-04-21**
 
 Modul: AI-assisted Software Development | BSc Business Artificial Intelligence | FHNW FS 2026
-Team: 4 Personen | Laufzeit: 12 Wochen | Zielnote: 5.5
+Team: Sheyla, Fabia, Nicolas, Andrea
 
 ---
 
@@ -615,6 +615,8 @@ MVP: API-Key-Header (`X-API-Key`). Key wird als Umgebungsvariable konfiguriert. 
 | Finnhub Free Tier | News, Earnings-Dates für Layer-2 Sentiment-Agent | 60 Calls/min; Rate-Limit-Handling nötig |
 | SEC EDGAR | 10-K / 10-Q PDFs für RAG | Öffentlich, kein Rate-Limit bei moderatem Zugriff |
 | Synthetische Daten | Unit-Tests, Golden-Datasets | Reproduzierbar, kein Netzwerkzugriff |
+
+> **Phase-2-MVP-Demo (ADR-0005):** Die 8 Quality-Classic-Fundamentalkennzahlen (P/E, P/B, FCF Yield, Operating Margin, Dividendenrendite, D/E, EPS-Wachstum 3J, Sales-Wachstum 3J) werden nicht zur Laufzeit per yfinance-API abgerufen, sondern aus einem committed CSV-Snapshot (`backend/data/fundamentals_demo_2026Q1.csv`) in Postgres geladen. Ein `YFinanceAdapter` hinter einem `FundamentalsPort` existiert im Codebase, wird jedoch ausschliesslich durch `scripts/refresh_fundamentals.py` (manueller Pre-Presentation-Refresh) aufgerufen — nie durch Application-Services. Die obige Tabelle beschreibt den mittelfristigen Zielzustand.
 
 **Caching-Strategie**: Alle externen Datenabrufe werden mit Timestamp in der `Factsheet`-Tabelle gecacht. TTL: 24 Stunden für Fundamentaldaten, 4 Stunden für Preisdaten. Adapter werfen `DataNotAvailableError` bei Fehler; Services entscheiden über Fallback.
 
