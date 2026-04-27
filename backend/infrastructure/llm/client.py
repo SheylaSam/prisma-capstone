@@ -16,9 +16,17 @@ from decimal import Decimal
 from typing import Any
 
 from backend.application.services.cost_tracker import CostTracker
+from backend.domain.errors import UnknownModelError
 from backend.infrastructure.llm.pricing import PRICING
 
 _ONE_MILLION = Decimal("1_000_000")
+
+# Konservativer Token-Estimator: ~3 chars/token. Anthropic-Tokenizer
+# liefert empirisch ~4 chars/token für Englisch, aber DE-Texte und
+# Code-Snippets brechen das deutlich nach unten. Einen zu *niedrigen*
+# Faktor zu wählen unterschätzt die Kosten und macht die Cap-Schwelle
+# leck — wir bleiben bewusst auf der pessimistischen Seite.
+_CHARS_PER_TOKEN_ESTIMATE = 3
 
 
 class LLMClient:
@@ -89,12 +97,17 @@ class LLMClient:
         Voyage-SDK ist sync — Aufruf läuft in einem Thread-Pool, damit der
         Event-Loop nicht blockiert wird.
         """
-        pricing = PRICING[model]
+        try:
+            pricing = PRICING[model]
+        except KeyError as exc:
+            raise UnknownModelError(model, reason="nicht in PRICING-Registry") from exc
         if pricing.embed_per_mtok is None:
-            raise ValueError(f"Modell {model!r} hat kein embed-Pricing — verwende messages_create")
+            raise UnknownModelError(model, reason="kein Embed-Pricing — verwende messages_create")
 
         chars = sum(len(t) for t in texts)
-        estimated_usd = Decimal(chars // 4) * pricing.embed_per_mtok / _ONE_MILLION
+        estimated_usd = (
+            Decimal(chars // _CHARS_PER_TOKEN_ESTIMATE) * pricing.embed_per_mtok / _ONE_MILLION
+        )
         await self._cost_tracker.check_cap(estimated_usd=estimated_usd)
 
         # Voyage Python SDK ist synchron; in den Thread-Pool auslagern,
@@ -118,12 +131,18 @@ class LLMClient:
         max_tokens: int,
         system: str | None,
     ) -> Decimal:
-        """chars/4 für Input + max_tokens als worst-case Output."""
-        pricing = PRICING[model]
+        """chars/3 für Input (konservativ, siehe Modul-Konstante) + max_tokens
+        als worst-case Output."""
+        try:
+            pricing = PRICING[model]
+        except KeyError as exc:
+            raise UnknownModelError(model, reason="nicht in PRICING-Registry") from exc
+        if pricing.input_per_mtok is None or pricing.output_per_mtok is None:
+            raise UnknownModelError(model, reason="kein Chat-Pricing — verwende embed")
         chars = sum(len(m.get("content", "")) for m in messages)
         if system:
             chars += len(system)
-        input_tokens_est = chars // 4
+        input_tokens_est = chars // _CHARS_PER_TOKEN_ESTIMATE
         return (
             Decimal(input_tokens_est) * pricing.input_per_mtok / _ONE_MILLION
             + Decimal(max_tokens) * pricing.output_per_mtok / _ONE_MILLION

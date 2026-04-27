@@ -39,6 +39,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # FastAPI typisiert add_exception_handler über `Type[Exception]` mit einem
+    # generischen Handler-Signature, das unsere konkrete (Request, BudgetCapExceeded)-
+    # Signatur nicht akzeptiert. Laufzeit funktioniert korrekt; das ist ein
+    # bekanntes Sticky-Problem im Starlette/FastAPI-Type-Stub.
     app.add_exception_handler(BudgetCapExceeded, handle_budget_cap_exceeded)  # type: ignore[arg-type]
 
     app.include_router(health.router)

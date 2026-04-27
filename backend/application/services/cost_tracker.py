@@ -22,7 +22,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from backend.domain.cost_summary import CostSummary
-from backend.domain.errors import BudgetCapExceeded
+from backend.domain.errors import BudgetCapExceeded, UnknownModelError
 from backend.domain.repositories.cost_log_repository import (
     CostLogEntry,
     CostLogRepository,
@@ -104,12 +104,23 @@ class CostTracker:
         """Token-Counts → Kosten in USD via PRICING-Registry.
 
         Embedding-Modelle (embed_per_mtok ist gesetzt) verwenden nur
-        input_tokens; Chat-Modelle verwenden input + output.
+        input_tokens; Chat-Modelle verwenden input + output. Wirft
+        `UnknownModelError` bei unbekannten oder fehlerhaft konfigurierten
+        Modellen — kein blanker `KeyError`.
         """
-        pricing = PRICING[model]
+        try:
+            pricing = PRICING[model]
+        except KeyError as exc:
+            raise UnknownModelError(model, reason="nicht in PRICING-Registry") from exc
+
         million = Decimal("1_000_000")
         if pricing.embed_per_mtok is not None:
             return Decimal(input_tokens) * pricing.embed_per_mtok / million
+        if pricing.input_per_mtok is None or pricing.output_per_mtok is None:
+            raise UnknownModelError(
+                model,
+                reason="weder Chat- noch Embed-Pricing gesetzt — Registry-Bug",
+            )
         return (
             Decimal(input_tokens) * pricing.input_per_mtok / million
             + Decimal(output_tokens) * pricing.output_per_mtok / million

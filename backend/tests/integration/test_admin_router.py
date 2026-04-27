@@ -22,7 +22,7 @@ from backend.domain.cost_summary import (
 )
 from backend.interfaces.rest.app import create_app
 from backend.interfaces.rest.dependencies import get_cost_tracker, get_stock_repository
-from backend.tests.conftest import InMemoryStockRepository, _make_sample_stocks
+from backend.tests.conftest import InMemoryStockRepository
 
 # Fester Test-API-Key — entkoppelt die Tests vom Production-Default in
 # config.py. Tests senden diesen Key, der Override unten injiziert ihn
@@ -70,7 +70,9 @@ class FakeCostTracker:
 
 
 @pytest_asyncio.fixture
-async def admin_http_client() -> AsyncGenerator[AsyncClient, None]:
+async def admin_http_client(
+    in_memory_repo: InMemoryStockRepository,
+) -> AsyncGenerator[AsyncClient, None]:
     """AsyncClient mit FakeCostTracker-, InMemoryStockRepository- und
     Test-Settings-Overrides.
 
@@ -80,13 +82,9 @@ async def admin_http_client() -> AsyncGenerator[AsyncClient, None]:
     """
     app = create_app()
 
-    repo = InMemoryStockRepository()
-    for stock in _make_sample_stocks():
-        repo.add(stock)
-
     test_settings = Settings(api_key=_TEST_API_KEY)
 
-    app.dependency_overrides[get_stock_repository] = lambda: repo
+    app.dependency_overrides[get_stock_repository] = lambda: in_memory_repo
     app.dependency_overrides[get_cost_tracker] = lambda: FakeCostTracker()
     app.dependency_overrides[get_settings] = lambda: test_settings
 

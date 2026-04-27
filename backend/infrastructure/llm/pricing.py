@@ -19,13 +19,15 @@ from decimal import Decimal
 class ModelPricing:
     """Token-Preise pro 1 Mio Tokens für ein einzelnes Modell.
 
-    Bei reinen Embedding-Modellen (Voyage) sind `input_per_mtok` und
-    `output_per_mtok` auf 0 gesetzt; `embed_per_mtok` enthält den Preis.
-    Bei Chat-Modellen (Claude) ist `embed_per_mtok` None.
+    `None` bedeutet **"trifft auf dieses Modell nicht zu"**, nicht
+    "kostenlos" — bei reinen Embedding-Modellen sind `input_per_mtok`
+    und `output_per_mtok` daher None, nicht 0. Andersrum ist
+    `embed_per_mtok` bei Chat-Modellen None. Aufrufer prüfen `is None`
+    und werfen `UnknownModelError`, wenn der Preistyp nicht passt.
     """
 
-    input_per_mtok: Decimal
-    output_per_mtok: Decimal
+    input_per_mtok: Decimal | None
+    output_per_mtok: Decimal | None
     embed_per_mtok: Decimal | None
 
 
@@ -41,8 +43,8 @@ PRICING: dict[str, ModelPricing] = {
         embed_per_mtok=None,
     ),
     "voyage-3-large": ModelPricing(
-        input_per_mtok=Decimal("0"),
-        output_per_mtok=Decimal("0"),
+        input_per_mtok=None,
+        output_per_mtok=None,
         embed_per_mtok=Decimal("0.18"),
     ),
 }

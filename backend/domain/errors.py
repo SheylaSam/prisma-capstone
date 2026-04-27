@@ -6,6 +6,19 @@ Spezifiziert in `docs/specs/2026-04-25-budget-cap.md` §8.
 from decimal import Decimal
 
 
+class UnknownModelError(Exception):
+    """Wird geworfen, wenn ein Modell nicht in der `PRICING`-Registry steht
+    oder nicht den passenden Preistyp hat (z.B. embed-Pricing für einen
+    Chat-Call). Tritt an die Stelle eines blanken `KeyError`, damit
+    Aufrufer-Code die Ursache erkennen kann.
+    """
+
+    def __init__(self, model: str, *, reason: str = "unbekannt") -> None:
+        self.model = model
+        self.reason = reason
+        super().__init__(f"Modell {model!r} nicht in PRICING-Registry: {reason}")
+
+
 class BudgetCapExceeded(Exception):
     """Wird geworfen, wenn ein LLM-Call das Monats-Budget-Cap überschreiten würde.
 

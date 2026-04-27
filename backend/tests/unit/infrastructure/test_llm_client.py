@@ -148,9 +148,10 @@ class TestMessagesCreate:
             )
         tracker.record.assert_not_called()
 
-    async def test_estimates_input_tokens_via_chars_div_4(self) -> None:
-        # 4000 chars input + 1024 max_tokens output, Sonnet pricing $3/$15:
-        # 1000 in × 3/1M + 1024 out × 15/1M = 0.003 + 0.01536 = 0.01836
+    async def test_estimates_input_tokens_via_chars_per_token_constant(self) -> None:
+        # 4000 chars input + 1024 max_tokens output, Sonnet pricing $3/$15;
+        # chars/3-Estimator → ~1333 in-Tokens.
+        # 1333 × 3/1M + 1024 × 15/1M = 0.004 + 0.01536 ≈ 0.01936
         client, _, _, tracker = _build_client()
         await client.messages_create(
             model="claude-sonnet-4-6",
