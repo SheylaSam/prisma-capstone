@@ -1,7 +1,7 @@
 """Unit-Tests für das RankingRun-Aggregate."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -15,7 +15,7 @@ pytestmark = pytest.mark.unit
 def _make_run(**overrides: object) -> RankingRun:
     defaults: dict[str, object] = {
         "id": uuid.uuid4(),
-        "created_at": datetime.now(tz=timezone.utc),
+        "created_at": datetime.now(tz=UTC),
         "universe_id": uuid.uuid4(),
         "weight_config": WeightConfig.equal(),
         "status": "pending",
