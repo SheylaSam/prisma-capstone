@@ -6,7 +6,7 @@ Spezifiziert in `docs/specs/2026-04-25-budget-cap.md` §8.
 hilfreichen Headers (z.B. `Retry-After`).
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -20,7 +20,7 @@ def _seconds_until_next_month_utc() -> int:
     Wird als Wert für den `Retry-After`-Header genutzt — Clients können so
     transparent erkennen, wann das Cap zurückgesetzt wird.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if now.month == 12:
         next_month_start = now.replace(
             year=now.year + 1,

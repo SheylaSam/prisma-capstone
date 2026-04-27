@@ -16,7 +16,7 @@ Spend-Limit ist Backstop.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import text
@@ -25,7 +25,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.domain.errors import BudgetCapExceeded
 from backend.infrastructure.llm.pricing import PRICING
 from backend.infrastructure.persistence.models.llm_call_log import LLMCallLogORM
-
 
 # ---------------------------------------------------------------------------
 # Dataclasses für CostSummary
@@ -181,7 +180,7 @@ class CostTracker:
         Drei SQL-Queries: SUM für cap-Status, GROUP BY model, GROUP BY feature,
         LIMIT :limit für letzte Calls. Spezifiziert in §9.
         """
-        month = datetime.now(timezone.utc).strftime("%Y-%m")
+        month = datetime.now(UTC).strftime("%Y-%m")
         current_usd = await self._current_month_usd()
         cap_usd = self._cap_usd
         remaining_usd = max(cap_usd - current_usd, Decimal("0"))

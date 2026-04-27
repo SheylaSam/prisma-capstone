@@ -7,7 +7,7 @@ Auth via X-API-Key (konstant-zeitsicher, hmac.compare_digest).
 """
 
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest_asyncio
@@ -42,7 +42,7 @@ _SAMPLE_SUMMARY = CostSummary(
     ],
     last_calls=[
         CallEntry(
-            created_at=datetime(2026, 4, 22, 12, 0, 0, tzinfo=timezone.utc),
+            created_at=datetime(2026, 4, 22, 12, 0, 0, tzinfo=UTC),
             model="claude-sonnet-4-6",
             feature="narrative_engine",
             cost_usd=Decimal("1.50"),
