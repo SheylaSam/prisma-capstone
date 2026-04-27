@@ -13,7 +13,7 @@ from decimal import Decimal
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from backend.application.services.cost_tracker import (
+from backend.domain.cost_summary import (
     CallEntry,
     CostSummary,
     FeatureBreakdown,

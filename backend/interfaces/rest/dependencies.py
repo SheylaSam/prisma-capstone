@@ -9,11 +9,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.application.services.cost_tracker import CostTracker
 from backend.application.services.stock_service import StockService
 from backend.config import get_settings
+from backend.domain.repositories.cost_log_repository import CostLogRepository
 from backend.domain.repositories.stock_repository import StockRepository
+from backend.infrastructure.persistence.repositories.cost_log_repository import (
+    SQLACostLogRepository,
+)
 from backend.infrastructure.persistence.repositories.stock_repository import (
     SQLAStockRepository,
 )
-from backend.infrastructure.persistence.session import get_async_session
+from backend.infrastructure.persistence.session import (
+    get_async_session,
+    get_session_factory,
+)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -36,13 +43,24 @@ async def get_stock_service(
     return StockService(repository=repository)
 
 
+async def get_cost_log_repository() -> CostLogRepository:
+    """Liefert den CostLogRepository-Adapter.
+
+    Im Gegensatz zu StockRepository bekommt der Cost-Adapter eine
+    Session-Factory injiziert, weil jede Operation (insbesondere `record()`)
+    in einer eigenen Transaktion laufen muss — sonst würden Audit-Inserts
+    laufende Business-Operationen mit-committen.
+    """
+    return SQLACostLogRepository(session_factory=get_session_factory())
+
+
 async def get_cost_tracker(
-    session: AsyncSession = Depends(get_session),
+    repository: CostLogRepository = Depends(get_cost_log_repository),
 ) -> CostTracker:
     """Konstruiert einen CostTracker mit Settings-gespeisten Cap-Werten."""
     settings = get_settings()
     return CostTracker(
-        session=session,
+        repository=repository,
         cap_usd=settings.budget_cap_usd,
         threshold=settings.budget_cap_threshold,
     )

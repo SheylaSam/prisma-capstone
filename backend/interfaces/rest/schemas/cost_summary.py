@@ -8,7 +8,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from backend.application.services.cost_tracker import CostSummary
+from backend.domain.cost_summary import CostSummary
 
 
 class ModelBreakdownResponse(BaseModel):
