@@ -1,3 +1,5 @@
+"""Unit-Tests für ContradictionItem Value-Object (ResearchMemo)."""
+
 import pytest
 from pydantic import ValidationError
 

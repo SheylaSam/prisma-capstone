@@ -1,4 +1,6 @@
-from pydantic import BaseModel, ConfigDict, Field
+"""ContradictionItem Value-Object — geteiltes Objekt zwischen ResearchMemoSchema und ResearchMemo."""
+
+from pydantic import BaseModel, Field
 
 
 class ContradictionItem(BaseModel):
@@ -8,7 +10,7 @@ class ContradictionItem(BaseModel):
     als auch ResearchMemo ihn nutzen.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = {"frozen": True}
 
     model_a: str = Field(..., min_length=1, max_length=64)
     model_b: str = Field(..., min_length=1, max_length=64)
