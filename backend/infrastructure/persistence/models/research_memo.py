@@ -20,6 +20,8 @@ from backend.infrastructure.persistence.base import Base
 
 
 class ResearchMemoORM(Base):
+    """Persistiertes Research-Memo zu einem Stock innerhalb eines Ranking-Runs."""
+
     __tablename__ = "research_memos"
 
     id: Mapped[uuid.UUID] = mapped_column(

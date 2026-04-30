@@ -44,11 +44,11 @@ async def truncate_research_memos(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> AsyncGenerator[None, None]:
     """Per-Test-Cleanup für research_memos-Tabelle."""
+    truncate_sql = text("TRUNCATE research_memos, ranking_runs, universes, stocks CASCADE")
+    async with session_factory() as session:
+        await session.execute(truncate_sql)
+        await session.commit()
     yield
     async with session_factory() as session:
-        await session.execute(
-            text(
-                "TRUNCATE research_memos, ranking_runs, universes, stocks RESTART IDENTITY CASCADE"
-            )
-        )
+        await session.execute(truncate_sql)
         await session.commit()

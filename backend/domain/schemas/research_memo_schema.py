@@ -11,7 +11,7 @@ from backend.domain.entities.research_memo import ContradictionItem
 class ResearchMemoSchema(BaseModel):
     """LLM-Output-Vertrag — was wir von Claude erwarten.
 
-    Master-Spec §4 wortgetreu. Wird im Service zu ResearchMemo (Entity)
+    Foundation-Spec §5.2 wortgetreu (siehe docs/specs/2026-04-30-narrative-engine-foundation.md). Wird im Service zu ResearchMemo (Entity)
     gemappt — Mapping kommt in Folge-PR.
     """
 

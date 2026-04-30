@@ -1,4 +1,4 @@
-"""ContradictionItem Value-Object — geteiltes Objekt zwischen ResearchMemoSchema und ResearchMemo."""
+"""Research-Memo Domain-Typen: ContradictionItem (Value-Object) und ResearchMemo (Entity)."""
 
 from datetime import datetime
 from typing import Literal

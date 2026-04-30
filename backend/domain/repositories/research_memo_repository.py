@@ -21,6 +21,7 @@ class ResearchMemoRepository(ABC):
         (stock_id, model_run_id, language) wird der existierende Eintrag
         überschrieben — alle Schema-Felder, aber NICHT created_at.
         """
+        ...
 
     @abstractmethod
     async def get(
@@ -30,3 +31,4 @@ class ResearchMemoRepository(ABC):
         language: Literal["de", "en"] = "de",
     ) -> ResearchMemo | None:
         """Lade existierendes Memo oder None."""
+        ...

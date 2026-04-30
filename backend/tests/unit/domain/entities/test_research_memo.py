@@ -22,6 +22,7 @@ class TestContradictionItem:
         assert item.model_a == "Quality Classic"
 
     def test_is_frozen(self) -> None:
+        """Pydantic v2 frozen erzwingt Immutability via ValidationError beim setattr."""
         item = ContradictionItem(model_a="A", model_b="B", description="x" * 50)
         with pytest.raises(ValidationError):
             item.model_a = "C"
@@ -77,6 +78,7 @@ class TestResearchMemoEntity:
         assert memo.language == "en"
 
     def test_is_frozen(self) -> None:
+        """Pydantic v2 frozen erzwingt Immutability via ValidationError beim setattr."""
         memo = ResearchMemo(**_valid_entity_payload())
         with pytest.raises(ValidationError):
             memo.one_liner = "neuer text"
