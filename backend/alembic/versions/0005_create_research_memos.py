@@ -67,7 +67,7 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint(
             "confidence IN ('low', 'medium', 'high')",
-            name="ck_research_memos_confidence",
+            name="confidence",
         ),
     )
     op.create_index(

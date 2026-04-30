@@ -67,7 +67,7 @@ class ResearchMemoORM(Base):
         ),
         CheckConstraint(
             "confidence IN ('low', 'medium', 'high')",
-            name="ck_research_memos_confidence",
+            name="confidence",
         ),
         Index("ix_research_memos_model_run_id", "model_run_id"),
     )
