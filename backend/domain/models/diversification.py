@@ -46,11 +46,7 @@ class DiversificationModel:
         tickers: list[str] = list(prices.columns)
 
         if len(tickers) == 1:
-            return [
-                ModelRankingResult(
-                    ticker=tickers[0], score=None, rank=1, confidence="low"
-                )
-            ]
+            return [ModelRankingResult(ticker=tickers[0], score=None, rank=1, confidence="low")]
 
         returns = prices.pct_change().dropna(how="all")
         if len(returns) < _MIN_DATAPOINTS:
