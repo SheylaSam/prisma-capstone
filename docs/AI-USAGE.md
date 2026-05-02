@@ -18,6 +18,20 @@ Pro PR mit substantieller Agent-Beteiligung ein Eintrag:
 
 ## Einträge
 
+## 2026-05-02 · Diversification-Modell — TDD-Implementation (Branch `feat/diversification-impl`)
+- **Agent**: Claude Code (Opus 4.7), reine Main-Context-Arbeit (kein Subagent — klassischer Tight-Loop-TDD-Cycle).
+- **Scope**: Erstes der 4 noch ausstehenden Quant-Modelle aus dem Redesign-PR #26 vollständig implementiert. `DiversificationModel` ersetzt das `NotImplementedError`-Skeleton in `backend/domain/models/diversification.py` durch die in der Spec festgelegte Ledoit-Wolf-Shrinkage-Kovarianz-Berechnung mit `score = 2 / (annualisierte_vola + avg_korrelation)`. 6 Tests (Golden-Dataset 3-Ticker, Determinismus, leeres Universum, Single-Ticker, < 30 Datenpunkte, Zero-Variance-Ticker), alle grün. Pandas + numpy + scikit-learn neu in `pyproject.toml`-Deps aufgenommen. Volle Suite: 153 passed / 5 skipped, mypy strict + ruff clean.
+- **Was gut lief**:
+  - **TDD-Disziplin echt eingehalten**: Test-File komplett geschrieben, RED gesehen (6/6 fail mit `NotImplementedError`), erst dann Implementation — und die Implementation hatte beim ersten Run 5/6 grün, der eine Fehler war ein **echter Spec-Insight**: Ledoit-Wolf-Shrinkage glättet die Diagonale, also kann man Zero-Variance-Ticker nicht aus der geshrinkten Cov-Matrix erkennen. Pre-Check auf Roh-Returns-Std hinzugefügt. **Hätte bei "Tests after" niemals gefunden**, weil das Verhalten plausibel aussieht.
+  - **Spec-Treue**: Formel exakt aus `2026-04-28-quant-mvp-models.md §5` übernommen, nicht aus dem Gedächtnis rekonstruiert (CLAUDE.md-Anti-Pattern bewusst gemieden).
+  - **PR-Workflow korrekt von Anfang an**: Diesmal sofort `git checkout -b feat/diversification-impl` von aktuellem `main`, kein Direkt-Commit-auf-Main-Faux-Pas wie bei PR #26.
+- **Was nicht klappte**:
+  - **Pandas/numpy/sklearn waren nicht in `pyproject.toml`**, obwohl lokal installiert. Erst beim Schreiben der Tests aufgefallen. Lehre: bei neuer Domain-Library zuerst `pyproject.toml`-Eintrag prüfen, sonst CI grün lokal aber rot in GitHub Actions.
+  - **Pythonkonvertierung von numpy-Skalaren zu `float`** an mehreren Stellen nötig, damit mypy strict happy ist. Mini-Friction, aber lehrreich: numpy-Typen leaken sonst in den Domain-Layer.
+- **Methodisches Mini-Learning**: **Der Wert des "Verify RED"-Steps ist real.** Hätte ich die Tests nach der Implementation geschrieben, hätte der Zero-Variance-Edge-Case "passend zur Implementation" ausgesehen und das Bug wäre durchgerutscht. Test-First zwingt zur unabhängigen Spec-Prüfung.
+- **Token-Kosten**: ~25k Tokens Opus 4.7; ~0.50 USD.
+- **Autor**: Fabia Holzer (mit Claude Code)
+
 ## 2026-04-27 · Quant-Models-Redesign (PR #26, Commits `7f93095` bis `d62e719`)
 - **Agent**: Claude Code (Opus 4.7) + 1 Recherche-Sub-Agent (claude-code-guide) für Daten-Feasibility-Check
 - **Scope**: Quality AI + Anti-Cyclical aus dem MVP entfernen, Trend Momentum + Value Alpha Potential rein. Spec geschrieben (`2026-04-27-quant-models-redesign.md`, 237 Z.), ADR 0005 (90 Z.), Design-Spec/README/Frontend/Narrative-Engine/MCP-Spec konsistent durchpatcht (5 Files, 45 +/− 34), Skeleton-Domain-Code für 5 Modelle + 22 grüne / 7 skipped Tests, env-Migration `FINNHUB_API_KEY` → `FMP_API_KEY` im `.env.example`. Alles auf Feature-Branch, PR #26 für Review offen.
