@@ -18,6 +18,19 @@ Pro PR mit substantieller Agent-Beteiligung ein Eintrag:
 
 ## Einträge
 
+## 2026-05-03 · Value-Alpha-Potential-Modell — TDD-Implementation (Branch `feat/value-alpha-potential-impl`, stacked auf #62)
+- **Agent**: Claude Code (Opus 4.7), Main-Context.
+- **Scope**: Drittes von 4 ausstehenden Quant-Modellen aus PR #26-Redesign. `ValueAlphaPotentialModel` ersetzt `NotImplementedError`-Skeleton durch Rolling-Max-Alpha-Mean-Reversion: `alpha = pct_change(63) - benchmark.pct_change(63)`, `rolling_max = alpha.rolling(252, min_periods=68).max()`, `potential = rolling_max - alpha`. 7 Tests (Constants, Past-Star vs. Constant, At-Peak-Today/Negative-Potential-Edge-Case, Determinismus, Empty, Insufficient, Single-Ticker), **alle 7/7 grün beim ersten Run**. Volle Suite: 164 passed / 1 skipped, mypy strict + ruff format/check clean.
+- **PR-Strategie**: PR #63 stacked auf `feat/trend-momentum-impl` (PR #62), das wiederum auf #61 stacked. Drei-Stufen-Stack. Plan: nach #61-Merge → `gh pr edit 62 --base main`; nach #62-Merge → `gh pr edit 63 --base main`.
+- **Was gut lief**:
+  - **3. Modell, 3. mal beim ersten Run grün** (Diversification: 5/6, dann 6/6 nach Zero-Variance-Fix; Trend Momentum: 8/8; Value Alpha Potential: 7/7). Spec-First-Disziplin zahlt sich aus — die `2026-04-28-quant-mvp-models.md`-Spec macht alle Edge-Cases explizit, sodass Tests + Impl in der gleichen Mental-Model-Stunde fertig sind.
+  - **At-Peak-Test als Spec-Edge-Case-Anchor**: Die Spec sagt explizit „Negativer potential: Aktuelles Alpha über Rolling-Max → gültiger Score, wird normal gerankt." `test_at_peak_today_yields_negative_potential` testet genau das — keine Ranking-Regression bei Edge-Score-Werten. Würde bei „Tests-after" wahrscheinlich vergessen werden.
+- **Was nicht klappte**: 
+  - **Nichts (zum ersten Mal in der Wave)** — kein Format-Trap, kein Edge-Case-Bug, keine ruff/mypy-Iteration. Der Reflex `ruff format` + `ruff check` als CI-Mirror vor Push ist jetzt eingebaut.
+- **Methodisches Mini-Learning**: **Stacked-PRs sind kein Drama, wenn der Diff sauber bleibt.** Drei Branches in der Pipeline (`feat/diversification` → `feat/trend-momentum` → `feat/value-alpha-potential`) bedeuten dreimal `gh pr edit --base main` nach den jeweiligen Merges. Das ist Buchhaltungsaufwand, kein Coding-Aufwand. Der Trade-off lohnt sich gegenüber „warten bis #61 merged, dann erst #62 starten" — wir produzieren 3× so schnell, der Reviewer entscheidet die Reihenfolge.
+- **Token-Kosten**: ~12k Tokens Opus 4.7; ~0.25 USD.
+- **Autor**: Fabia Holzer (mit Claude Code)
+
 ## 2026-05-02 · Trend-Momentum-Modell — TDD-Implementation (Branch `feat/trend-momentum-impl`, stacked auf #61)
 - **Agent**: Claude Code (Opus 4.7), reine Main-Context-Arbeit (kein Subagent — kompakter TDD-Cycle).
 - **Scope**: Zweites von 4 ausstehenden Quant-Modellen aus PR #26-Redesign. `TrendMomentumModel` ersetzt `NotImplementedError`-Skeleton durch EWMA-basierte Implementation: `prices.pct_change().sub(benchmark.pct_change()).ewm(halflife=63, min_periods=32).mean()` → höchster Score = Rang 1. 8 Tests (Constants, Outperformer-Golden, Identical-Prices-Tie, Recent-Outperformance-EWMA-Halflife-Verifikation, Determinismus, Empty, Insufficient, Single-Ticker), alle grün **beim ersten Run**. Volle Suite: 159 passed / 3 skipped, mypy strict + ruff format/check clean.
