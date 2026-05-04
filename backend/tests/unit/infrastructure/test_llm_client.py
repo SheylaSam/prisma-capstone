@@ -248,3 +248,54 @@ class TestEmbed:
             )
         voyage.embed.assert_not_called()
         tracker.record.assert_not_called()
+
+
+async def test_messages_create_accepts_system_as_content_block_list() -> None:
+    """system kann auch list[dict] sein fuer cache_control-Markierung."""
+    fake_response = _fake_anthropic_response()
+    fake_anthropic = SimpleNamespace(
+        messages=SimpleNamespace(create=AsyncMock(return_value=fake_response))
+    )
+    fake_voyage = SimpleNamespace()
+    fake_tracker = Mock()
+    fake_tracker.check_cap = AsyncMock(return_value=None)
+    fake_tracker.record = AsyncMock(return_value=None)
+
+    client = LLMClient(
+        anthropic=fake_anthropic, voyage=fake_voyage, cost_tracker=fake_tracker
+    )
+
+    system_blocks = [
+        {
+            "type": "text",
+            "text": "You are a quant analyst." * 10,
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+
+    await client.messages_create(
+        model="claude-sonnet-4-6",
+        messages=[{"role": "user", "content": "Hello"}],
+        max_tokens=100,
+        feature="test",
+        system=system_blocks,
+    )
+
+    # SDK call must have received the system list verbatim
+    call_kwargs = fake_anthropic.messages.create.await_args.kwargs
+    assert call_kwargs["system"] == system_blocks
+
+
+async def test_estimate_messages_cost_handles_system_as_list() -> None:
+    """Cost-Estimator iteriert ueber alle text-blocks im system-list-Fall."""
+    cost = LLMClient._estimate_messages_cost(
+        model="claude-sonnet-4-6",
+        messages=[{"role": "user", "content": "abc" * 100}],
+        max_tokens=200,
+        system=[
+            {"type": "text", "text": "block-one" * 50},
+            {"type": "text", "text": "block-two" * 50},
+        ],
+    )
+    # Sanity: cost is > 0 and a Decimal
+    assert cost > Decimal("0")
