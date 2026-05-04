@@ -228,10 +228,12 @@ async def test_cache_hit_smoke_two_sequential_calls(
     session_factory, ids = seeded_run_with_stock
     second_stock_id = ids["second_stock_id"]
 
-    stub = StubAnthropicClient([
-        FIXTURES / "top_quality_stock.json",
-        FIXTURES / "contradictory_quality_risk.json",
-    ])
+    stub = StubAnthropicClient(
+        [
+            FIXTURES / "top_quality_stock.json",
+            FIXTURES / "contradictory_quality_risk.json",
+        ]
+    )
     async with session_factory() as session:
         service = NarrativeService(
             memo_repository=SQLAResearchMemoRepository(session_factory),

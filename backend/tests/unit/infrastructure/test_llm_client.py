@@ -261,9 +261,7 @@ async def test_messages_create_accepts_system_as_content_block_list() -> None:
     fake_tracker.check_cap = AsyncMock(return_value=None)
     fake_tracker.record = AsyncMock(return_value=None)
 
-    client = LLMClient(
-        anthropic=fake_anthropic, voyage=fake_voyage, cost_tracker=fake_tracker
-    )
+    client = LLMClient(anthropic=fake_anthropic, voyage=fake_voyage, cost_tracker=fake_tracker)
 
     system_blocks = [
         {
@@ -303,6 +301,6 @@ async def test_estimate_messages_cost_handles_system_as_list() -> None:
     # → (400*3 + 200*15)/1M = 4200/1M = 0.0042 USD ± margin
     expected_lo = Decimal("0.0040")
     expected_hi = Decimal("0.0045")
-    assert (
-        expected_lo <= cost <= expected_hi
-    ), f"cost {cost} outside band [{expected_lo}, {expected_hi}]"
+    assert expected_lo <= cost <= expected_hi, (
+        f"cost {cost} outside band [{expected_lo}, {expected_hi}]"
+    )

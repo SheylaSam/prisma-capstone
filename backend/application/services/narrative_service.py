@@ -45,9 +45,7 @@ class UniverseContext(BaseModel):
     top20_threshold: int = Field(..., ge=1)
 
 
-def _extract_ranking_for_ticker(
-    results: list[dict[str, Any]], *, ticker: str
-) -> dict[str, Any]:
+def _extract_ranking_for_ticker(results: list[dict[str, Any]], *, ticker: str) -> dict[str, Any]:
     """Filtert den Ranking-Eintrag fuer einen bestimmten Ticker.
 
     Wirft KeyError, wenn der Ticker nicht im Run vorkommt.
@@ -70,9 +68,7 @@ def _build_universe_context(results: list[dict[str, Any]]) -> UniverseContext:
     idx = max(0, int(round(0.20 * (n - 1))))
     top20_threshold = ranks[idx]
 
-    return UniverseContext(
-        n_stocks=n, median_rank=median_rank, top20_threshold=top20_threshold
-    )
+    return UniverseContext(n_stocks=n, median_rank=median_rank, top20_threshold=top20_threshold)
 
 
 def _stringify(obj: Any) -> dict[str, Any]:
@@ -171,16 +167,12 @@ class NarrativeService:
         try:
             ranking = _extract_ranking_for_ticker(results, ticker=stock.ticker)
         except KeyError as exc:
-            raise LookupError(
-                f"Stock {stock.ticker} not in run {model_run_id}"
-            ) from exc
+            raise LookupError(f"Stock {stock.ticker} not in run {model_run_id}") from exc
 
         universe_context = _build_universe_context(results)
 
         # 3. Prompts rendern
-        system_prompt = self._prompts.render(
-            f"narrative_system.{language}.md.j2", {}
-        )
+        system_prompt = self._prompts.render(f"narrative_system.{language}.md.j2", {})
         user_prompt = self._prompts.render(
             "narrative_user.md.j2",
             {
@@ -262,15 +254,15 @@ class NarrativeService:
                     return None
         return None
 
-    def _dump_malformed_response(
-        self, response: Any, *, stock_id: UUID, run_id: UUID
-    ) -> None:
+    def _dump_malformed_response(self, response: Any, *, stock_id: UUID, run_id: UUID) -> None:
         log_dir = Path("logs/malformed_memos")
         log_dir.mkdir(parents=True, exist_ok=True)
         ts = int(datetime.now(tz=UTC).timestamp())
         path = log_dir / f"{run_id}_{stock_id}_{ts}.json"
         try:
-            dump = response.model_dump() if hasattr(response, "model_dump") else _stringify(response)
+            dump = (
+                response.model_dump() if hasattr(response, "model_dump") else _stringify(response)
+            )
         except Exception:  # noqa: BLE001
             dump = _stringify(response)
         path.write_text(_json.dumps(dump, default=str, indent=2), encoding="utf-8")

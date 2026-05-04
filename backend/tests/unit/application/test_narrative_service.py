@@ -252,9 +252,7 @@ async def test_generate_memo_happy_path() -> None:
     llm = AsyncMock()
     llm.messages_create = AsyncMock(return_value=_tool_use_response(payload))
 
-    prompt_loader = SimpleNamespace(
-        render=Mock(side_effect=lambda name, ctx: f"<rendered-{name}>")
-    )
+    prompt_loader = SimpleNamespace(render=Mock(side_effect=lambda name, ctx: f"<rendered-{name}>"))
 
     service = NarrativeService(
         memo_repository=memo_repo,

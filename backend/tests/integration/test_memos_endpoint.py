@@ -113,11 +113,13 @@ def test_post_generate_sets_is_error_when_fallback_memo(
     app_with_mock_service: tuple[Any, AsyncMock],
 ) -> None:
     app, mock_service = app_with_mock_service
-    memo = _sample_memo().model_copy(update={
-        "model_version": "error-fallback",
-        "one_liner": "Memo-Generierung fehlgeschlagen — bitte Run regenerieren",
-        "confidence": "low",
-    })
+    memo = _sample_memo().model_copy(
+        update={
+            "model_version": "error-fallback",
+            "one_liner": "Memo-Generierung fehlgeschlagen — bitte Run regenerieren",
+            "confidence": "low",
+        }
+    )
     mock_service.generate_memo = AsyncMock(return_value=memo)
 
     with TestClient(app) as client:

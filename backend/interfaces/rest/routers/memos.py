@@ -42,9 +42,8 @@ class MemoResponse(BaseModel):
 
     @classmethod
     def from_entity(cls, memo: ResearchMemo) -> "MemoResponse":
-        is_error = (
-            memo.model_version == "error-fallback"
-            or memo.one_liner.startswith("Memo-Generierung fehlgeschlagen")
+        is_error = memo.model_version == "error-fallback" or memo.one_liner.startswith(
+            "Memo-Generierung fehlgeschlagen"
         )
         return cls(
             id=memo.id,
