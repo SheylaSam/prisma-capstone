@@ -12,12 +12,14 @@ In dieser Datei (alles Service-internes Detail):
 from __future__ import annotations
 
 import asyncio
+import json as _json
 from datetime import UTC, datetime
+from pathlib import Path
 from statistics import median
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from backend.domain.entities.research_memo import ResearchMemo
 from backend.domain.entities.stock import Stock
@@ -71,6 +73,15 @@ def _build_universe_context(results: list[dict[str, Any]]) -> UniverseContext:
     return UniverseContext(
         n_stocks=n, median_rank=median_rank, top20_threshold=top20_threshold
     )
+
+
+def _stringify(obj: Any) -> dict[str, Any]:
+    """Fallback-Dump fuer SimpleNamespace und aehnliche Objekte ohne model_dump."""
+    if hasattr(obj, "__dict__"):
+        return {k: _stringify(v) if hasattr(v, "__dict__") else v for k, v in obj.__dict__.items()}
+    if isinstance(obj, list):
+        return {"_list": [_stringify(x) if hasattr(x, "__dict__") else x for x in obj]}
+    return {"_repr": repr(obj)}
 
 
 def _rankings_for_template(ranking: dict[str, Any]) -> dict[str, dict[str, float | int]]:
@@ -205,8 +216,11 @@ class NarrativeService:
             feature="narrative_engine",
         )
 
-        # 5. Tool-use Antwort → Pydantic-Validate
-        memo_schema = self._validate_tool_response(response, stock=stock, ranking=ranking)
+        # 5. Tool-use Antwort → Pydantic-Validate (oder Error-Memo-Pfad)
+        memo_schema = self._try_validate_tool_response(response)
+        if memo_schema is None:
+            self._dump_malformed_response(response, stock_id=stock_id, run_id=model_run_id)
+            memo_schema = self._build_error_memo_schema(stock=stock, ranking=ranking)
 
         # 6. Persist
         memo_entity = ResearchMemo(
@@ -228,17 +242,49 @@ class NarrativeService:
         await self._memo_repo.save(memo_entity)
         return memo_entity
 
-    def _validate_tool_response(
-        self, response: Any, *, stock: Stock, ranking: dict[str, Any]
-    ) -> ResearchMemoSchema:
-        """Extrahiert tool_use-Block + Pydantic-Validate. Error-Memo-Pfad: Task 8."""
+    def _try_validate_tool_response(self, response: Any) -> ResearchMemoSchema | None:
+        """Liefert die validierte Schema-Instanz oder None bei Fehler."""
         for block in response.content:
             if (
                 getattr(block, "type", None) == "tool_use"
                 and getattr(block, "name", None) == "submit_memo"
             ):
-                return ResearchMemoSchema.model_validate(block.input)
-        # Kein passender Block — Task 8 ergaenzt hier den error-memo-Pfad.
-        raise RuntimeError(
-            "No submit_memo tool_use block in response (Task 8: error-memo path)"
+                try:
+                    return ResearchMemoSchema.model_validate(block.input)
+                except ValidationError:
+                    return None
+        return None
+
+    def _dump_malformed_response(
+        self, response: Any, *, stock_id: UUID, run_id: UUID
+    ) -> None:
+        log_dir = Path("logs/malformed_memos")
+        log_dir.mkdir(parents=True, exist_ok=True)
+        ts = int(datetime.now(tz=UTC).timestamp())
+        path = log_dir / f"{run_id}_{stock_id}_{ts}.json"
+        try:
+            dump = response.model_dump() if hasattr(response, "model_dump") else _stringify(response)
+        except Exception:  # noqa: BLE001
+            dump = _stringify(response)
+        path.write_text(_json.dumps(dump, default=str, indent=2), encoding="utf-8")
+
+    def _build_error_memo_schema(
+        self, *, stock: Stock, ranking: dict[str, Any]
+    ) -> ResearchMemoSchema:
+        return ResearchMemoSchema(
+            ticker=stock.ticker,
+            total_rank=int(ranking["total_rank"]),
+            one_liner="Memo-Generierung fehlgeschlagen — bitte Run regenerieren",
+            ranking_interpretation=(
+                "Automatisch generiertes Memo nicht erzeugbar. Bitte Raw-Response"
+                " in logs/malformed_memos/ pruefen und Run neu starten."
+            ),
+            sweet_spot=False,
+            sweet_spot_explanation=None,
+            contradictions=[],
+            key_strengths=["—"],
+            key_risks=["—"],
+            confidence="low",
+            generated_at=datetime.now(tz=UTC),
+            model_version="error-fallback",
         )

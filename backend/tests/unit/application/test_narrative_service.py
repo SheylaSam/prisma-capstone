@@ -346,3 +346,114 @@ async def test_generate_memo_404_when_stock_not_in_run() -> None:
 
     with pytest.raises(LookupError, match="UNKNOWN"):
         await service.generate_memo(uuid4(), uuid4())
+
+
+# ---------------------------------------------------------------------------
+# Task 8 — NarrativeService.generate_memo — Error-Pfade
+# ---------------------------------------------------------------------------
+
+import json
+from pathlib import Path
+
+
+async def test_generate_memo_persists_error_memo_when_no_tool_use_block(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bei Anthropic-Response ohne submit_memo-Tool-Block: error-memo persistieren."""
+    monkeypatch.chdir(tmp_path)  # logs/malformed_memos/ landet in tmp
+
+    stock_id, run_id = uuid4(), uuid4()
+
+    memo_repo = AsyncMock()
+    memo_repo.get = AsyncMock(return_value=None)
+    memo_repo.save = AsyncMock()
+    stock_repo = AsyncMock()
+    stock_repo.get = AsyncMock(return_value=_stock(stock_id=stock_id))
+    run_repo = AsyncMock()
+    run_repo.get_results = AsyncMock(return_value=_sample_results())
+
+    bad_response = SimpleNamespace(
+        id="msg_x",
+        usage=SimpleNamespace(input_tokens=10, output_tokens=5),
+        content=[SimpleNamespace(type="text", text="I refuse")],
+        stop_reason="end_turn",
+    )
+    llm = AsyncMock()
+    llm.messages_create = AsyncMock(return_value=bad_response)
+    prompt_loader = SimpleNamespace(render=Mock(side_effect=lambda name, ctx: "<rendered>"))
+
+    service = NarrativeService(
+        memo_repository=memo_repo,
+        run_repository=run_repo,
+        stock_repository=stock_repo,
+        llm_client=llm,
+        prompt_loader=prompt_loader,
+    )
+
+    result = await service.generate_memo(stock_id, run_id)
+
+    # Error-Memo wurde persistiert
+    memo_repo.save.assert_awaited_once()
+    assert result.confidence == "low"
+    assert "fehlgeschlagen" in result.one_liner.lower()
+    assert result.model_version == "error-fallback"
+
+    # Raw-Response in logs/malformed_memos/
+    log_dir = tmp_path / "logs" / "malformed_memos"
+    assert log_dir.exists()
+    log_files = list(log_dir.glob("*.json"))
+    assert len(log_files) == 1
+    raw = json.loads(log_files[0].read_text())
+    # Mindestens id und content sind im Dump
+    assert raw.get("id") == "msg_x"
+
+
+async def test_generate_memo_persists_error_memo_on_pydantic_fail(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bei Schema-Verletzung (z.B. one_liner zu kurz): error-memo persistieren."""
+    monkeypatch.chdir(tmp_path)
+
+    stock_id, run_id = uuid4(), uuid4()
+
+    memo_repo = AsyncMock()
+    memo_repo.get = AsyncMock(return_value=None)
+    memo_repo.save = AsyncMock()
+    stock_repo = AsyncMock()
+    stock_repo.get = AsyncMock(return_value=_stock(stock_id=stock_id))
+    run_repo = AsyncMock()
+    run_repo.get_results = AsyncMock(return_value=_sample_results())
+
+    invalid_payload = {
+        "ticker": "NESN",
+        "total_rank": 1,
+        "one_liner": "x",  # zu kurz (min_length=10)
+        "ranking_interpretation": "y" * 120,
+        "sweet_spot": True,
+        "sweet_spot_explanation": None,
+        "contradictions": [],
+        "key_strengths": ["a"],
+        "key_risks": ["b"],
+        "confidence": "high",
+        "generated_at": "2026-05-04T10:00:00Z",
+        "model_version": "claude-sonnet-4-6",
+    }
+    llm = AsyncMock()
+    llm.messages_create = AsyncMock(return_value=_tool_use_response(invalid_payload))
+    prompt_loader = SimpleNamespace(render=Mock(side_effect=lambda name, ctx: "<rendered>"))
+
+    service = NarrativeService(
+        memo_repository=memo_repo,
+        run_repository=run_repo,
+        stock_repository=stock_repo,
+        llm_client=llm,
+        prompt_loader=prompt_loader,
+    )
+
+    result = await service.generate_memo(stock_id, run_id)
+
+    memo_repo.save.assert_awaited_once()
+    assert result.confidence == "low"
+    assert result.model_version == "error-fallback"
