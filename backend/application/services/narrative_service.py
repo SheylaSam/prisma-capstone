@@ -12,9 +12,17 @@ In dieser Datei (alles Service-internes Detail):
 from __future__ import annotations
 
 from statistics import median
-from typing import Any
+from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+from backend.domain.entities.research_memo import ResearchMemo
+from backend.domain.repositories.ranking_run_repository import RankingRunRepository
+from backend.domain.repositories.research_memo_repository import ResearchMemoRepository
+from backend.domain.repositories.stock_repository import StockRepository
+from backend.infrastructure.llm.client import LLMClient
+from backend.infrastructure.llm.prompts.prompt_loader import PromptTemplateLoader
 
 
 class UniverseContext(BaseModel):
@@ -62,7 +70,30 @@ def _build_universe_context(results: list[dict[str, Any]]) -> UniverseContext:
 
 
 class NarrativeService:
-    """Memo-Generation. Implementation kommt in Tasks 6-8."""
+    """Memo-Generation. Spec §5."""
 
-    def __init__(self) -> None:
-        raise NotImplementedError("NarrativeService wird in Task 6 vollstaendig implementiert")
+    def __init__(
+        self,
+        *,
+        memo_repository: ResearchMemoRepository,
+        run_repository: RankingRunRepository,
+        stock_repository: StockRepository,
+        llm_client: LLMClient,
+        prompt_loader: PromptTemplateLoader,
+        model: str = "claude-sonnet-4-6",
+    ) -> None:
+        self._memo_repo = memo_repository
+        self._run_repo = run_repository
+        self._stock_repo = stock_repository
+        self._llm = llm_client
+        self._prompts = prompt_loader
+        self._model = model
+
+    async def get_memo(
+        self,
+        stock_id: UUID,
+        model_run_id: UUID,
+        *,
+        language: Literal["de", "en"] = "de",
+    ) -> ResearchMemo | None:
+        return await self._memo_repo.get(stock_id, model_run_id, language=language)

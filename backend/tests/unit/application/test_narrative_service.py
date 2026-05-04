@@ -1,16 +1,21 @@
 """Unit-Tests fuer NarrativeService — Helpers + Service-Logik."""
 
+from datetime import UTC, datetime
 from typing import Any
+from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
 
 from backend.application.services.narrative_service import (
+    NarrativeService,
     UniverseContext,
     _build_universe_context,
     _extract_ranking_for_ticker,
 )
+from backend.domain.entities.research_memo import ResearchMemo
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
 
 def _sample_results() -> list[dict[str, Any]]:
@@ -100,3 +105,63 @@ def test_build_universe_context_with_one_stock() -> None:
     assert ctx.n_stocks == 1
     assert ctx.median_rank == 1
     assert ctx.top20_threshold == 1
+
+
+# ---------------------------------------------------------------------------
+# Task 6 — NarrativeService.get_memo
+# ---------------------------------------------------------------------------
+
+
+def _sample_memo(stock_id: Any = None, run_id: Any = None) -> ResearchMemo:
+    return ResearchMemo(
+        id=uuid4(),
+        stock_id=stock_id or uuid4(),
+        model_run_id=run_id or uuid4(),
+        language="de",
+        created_at=datetime.now(tz=UTC),
+        one_liner="Kurzfassung des Memos.",
+        ranking_interpretation="x" * 120,
+        sweet_spot=True,
+        sweet_spot_explanation=None,
+        contradictions=[],
+        key_strengths=["Top 10% Quality"],
+        key_risks=["Bewertungs-Multiples nicht im Modell"],
+        confidence="high",
+        model_version="claude-sonnet-4-6",
+    )
+
+
+async def test_get_memo_returns_existing() -> None:
+    stock_id, run_id = uuid4(), uuid4()
+    expected = _sample_memo(stock_id=stock_id, run_id=run_id)
+
+    memo_repo = AsyncMock()
+    memo_repo.get = AsyncMock(return_value=expected)
+
+    service = NarrativeService(
+        memo_repository=memo_repo,
+        run_repository=AsyncMock(),
+        stock_repository=AsyncMock(),
+        llm_client=AsyncMock(),
+        prompt_loader=AsyncMock(),
+    )
+    result = await service.get_memo(stock_id, run_id)
+
+    assert result is expected
+    memo_repo.get.assert_awaited_once_with(stock_id, run_id, language="de")
+
+
+async def test_get_memo_returns_none_when_missing() -> None:
+    memo_repo = AsyncMock()
+    memo_repo.get = AsyncMock(return_value=None)
+
+    service = NarrativeService(
+        memo_repository=memo_repo,
+        run_repository=AsyncMock(),
+        stock_repository=AsyncMock(),
+        llm_client=AsyncMock(),
+        prompt_loader=AsyncMock(),
+    )
+    result = await service.get_memo(uuid4(), uuid4())
+
+    assert result is None
