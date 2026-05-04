@@ -28,11 +28,15 @@ class StubAnthropicClient:
 
 
 def _to_namespace(obj: Any, *, _key: str | None = None) -> Any:
-    """Dict → SimpleNamespace rekursiv.
+    """Dict → SimpleNamespace rekursiv. Spezial-Fall: dict-content-blocks
+    bleiben dicts wo die Anthropic-API `input` als dict erwartet (Pydantic
+    v2 model_validate akzeptiert keine SimpleNamespace).
 
-    Ausnahme: Der Wert unter dem Schluessel ``input`` bleibt ein plain dict,
-    damit `ResearchMemoSchema.model_validate(block.input)` wie gegen das echte
-    Anthropic SDK funktioniert (das ebenfalls `input` als dict zurueckgibt).
+    Note on list-recursion: list elements inherit the parent _key.
+    Currently safe because Anthropic-Response lists (e.g., content[]) are
+    parented by 'content', never by 'input'. If a future fixture nests a
+    list under an 'input' key, every element would stay as dict instead of
+    becoming SimpleNamespace.
     """
     if isinstance(obj, dict):
         if _key == "input":

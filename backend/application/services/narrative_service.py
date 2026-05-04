@@ -76,7 +76,14 @@ def _build_universe_context(results: list[dict[str, Any]]) -> UniverseContext:
 
 
 def _stringify(obj: Any) -> dict[str, Any]:
-    """Fallback-Dump fuer SimpleNamespace und aehnliche Objekte ohne model_dump."""
+    """Fallback-Dump fuer SimpleNamespace und aehnliche Objekte ohne model_dump.
+
+    Note: Lists in __dict__ values stay as lists; their elements are NOT
+    recursively expanded. Sufficient for Anthropic-Response shapes where
+    nested SimpleNamespace lists end up as repr() strings via json.dumps's
+    default=str fallback. If a future shape needs deep dict-form output,
+    rewrite to recurse into list elements.
+    """
     if hasattr(obj, "__dict__"):
         return {k: _stringify(v) if hasattr(v, "__dict__") else v for k, v in obj.__dict__.items()}
     if isinstance(obj, list):

@@ -34,11 +34,11 @@ class LLMClient:
         self,
         *,
         anthropic: Any,
-        voyage: Any,
+        voyage: Any | None,
         cost_tracker: CostTracker,
     ) -> None:
         self._anthropic = anthropic
-        self._voyage = voyage
+        self._voyage: Any | None = voyage
         self._cost_tracker = cost_tracker
 
     async def messages_create(
@@ -97,6 +97,11 @@ class LLMClient:
         Voyage-SDK ist sync — Aufruf läuft in einem Thread-Pool, damit der
         Event-Loop nicht blockiert wird.
         """
+        if self._voyage is None:
+            raise RuntimeError(
+                "LLMClient was constructed without a Voyage client (voyage=None). "
+                "embed() requires a Voyage client. Wire one via dependencies.get_voyage_client."
+            )
         try:
             pricing = PRICING[model]
         except KeyError as exc:

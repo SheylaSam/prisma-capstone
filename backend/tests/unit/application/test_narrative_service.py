@@ -1,6 +1,8 @@
 """Unit-Tests fuer NarrativeService — Helpers + Service-Logik."""
 
+import json
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, Mock
@@ -259,7 +261,7 @@ async def test_generate_memo_happy_path() -> None:
         run_repository=run_repo,
         stock_repository=stock_repo,
         llm_client=llm,
-        prompt_loader=prompt_loader,
+        prompt_loader=prompt_loader,  # type: ignore[arg-type]
     )
 
     result = await service.generate_memo(stock_id, run_id)
@@ -352,9 +354,6 @@ async def test_generate_memo_404_when_stock_not_in_run() -> None:
 # Task 8 — NarrativeService.generate_memo — Error-Pfade
 # ---------------------------------------------------------------------------
 
-import json
-from pathlib import Path
-
 
 async def test_generate_memo_persists_error_memo_when_no_tool_use_block(
     tmp_path: Path,
@@ -388,7 +387,7 @@ async def test_generate_memo_persists_error_memo_when_no_tool_use_block(
         run_repository=run_repo,
         stock_repository=stock_repo,
         llm_client=llm,
-        prompt_loader=prompt_loader,
+        prompt_loader=prompt_loader,  # type: ignore[arg-type]
     )
 
     result = await service.generate_memo(stock_id, run_id)
@@ -449,7 +448,7 @@ async def test_generate_memo_persists_error_memo_on_pydantic_fail(
         run_repository=run_repo,
         stock_repository=stock_repo,
         llm_client=llm,
-        prompt_loader=prompt_loader,
+        prompt_loader=prompt_loader,  # type: ignore[arg-type]
     )
 
     result = await service.generate_memo(stock_id, run_id)
@@ -457,3 +456,58 @@ async def test_generate_memo_persists_error_memo_on_pydantic_fail(
     memo_repo.save.assert_awaited_once()
     assert result.confidence == "low"
     assert result.model_version == "error-fallback"
+
+
+# ---------------------------------------------------------------------------
+# Task 7 (Coverage-Gap) — force_regenerate=True bypasst Cache
+# ---------------------------------------------------------------------------
+
+
+async def test_generate_memo_force_regenerate_bypasses_cache() -> None:
+    """force_regenerate=True ueberspringt Cache-Check und ruft LLM."""
+    stock_id, run_id = uuid4(), uuid4()
+    cached = _sample_memo(stock_id=stock_id, run_id=run_id)
+
+    memo_repo = AsyncMock()
+    memo_repo.get = AsyncMock(return_value=cached)
+    memo_repo.save = AsyncMock()
+
+    stock_repo = AsyncMock()
+    stock_repo.get = AsyncMock(return_value=_stock(stock_id=stock_id))
+    run_repo = AsyncMock()
+    run_repo.get_results = AsyncMock(return_value=_sample_results())
+
+    payload = {
+        "ticker": "NESN",
+        "total_rank": 1,
+        "one_liner": "Frischer Memo nach force_regenerate.",
+        "ranking_interpretation": "x" * 120,
+        "sweet_spot": True,
+        "sweet_spot_explanation": "Top 25% in 4 Modellen.",
+        "contradictions": [],
+        "key_strengths": ["Top 10% Quality"],
+        "key_risks": ["Bewertungs-Multiples"],
+        "confidence": "high",
+        "generated_at": "2026-05-04T10:00:00Z",
+        "model_version": "claude-sonnet-4-6",
+    }
+    llm = AsyncMock()
+    llm.messages_create = AsyncMock(return_value=_tool_use_response(payload))
+    prompt_loader = SimpleNamespace(render=Mock(side_effect=lambda name, ctx: f"<rendered-{name}>"))
+
+    service = NarrativeService(
+        memo_repository=memo_repo,
+        run_repository=run_repo,
+        stock_repository=stock_repo,
+        llm_client=llm,
+        prompt_loader=prompt_loader,  # type: ignore[arg-type]
+    )
+
+    result = await service.generate_memo(stock_id, run_id, force_regenerate=True)
+
+    # LLM was called (cache was bypassed)
+    llm.messages_create.assert_awaited_once()
+    # New memo was saved (replacing cached)
+    memo_repo.save.assert_awaited_once()
+    # Returned memo is the freshly generated one
+    assert result.one_liner == "Frischer Memo nach force_regenerate."

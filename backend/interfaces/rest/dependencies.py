@@ -2,6 +2,7 @@
 
 import hmac
 from collections.abc import AsyncGenerator
+from functools import lru_cache
 from typing import Any
 
 import anthropic
@@ -138,15 +139,11 @@ async def require_admin_api_key(
 # NarrativeService DI-Chain
 # ---------------------------------------------------------------------------
 
-_PROMPT_LOADER_SINGLETON: PromptTemplateLoader | None = None
 
-
+@lru_cache(maxsize=1)
 def get_prompt_loader() -> PromptTemplateLoader:
     """Singleton — Templates werden einmal beim ersten Aufruf geladen."""
-    global _PROMPT_LOADER_SINGLETON
-    if _PROMPT_LOADER_SINGLETON is None:
-        _PROMPT_LOADER_SINGLETON = PromptTemplateLoader()
-    return _PROMPT_LOADER_SINGLETON
+    return PromptTemplateLoader()
 
 
 async def get_anthropic_client(
