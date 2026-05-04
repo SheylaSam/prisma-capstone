@@ -50,7 +50,11 @@ Begründung der Slicing-Wahl: ein einzelner Memo-Pfad validiert das Pydantic-Sch
 ```
 backend/
 ├── application/services/
-│   └── narrative_service.py                    # NEU
+│   └── narrative_service.py                    # NEU (enthält UniverseContext-Value-Object inline)
+├── domain/repositories/
+│   └── stock_repository.py                     # ERWEITERT (get(stock_id) hinzugefügt)
+├── infrastructure/persistence/repositories/
+│   └── stock_repository.py                     # ERWEITERT (get(stock_id) Adapter)
 ├── infrastructure/llm/
 │   ├── client.py                               # MINI-EXT (system: str | list[dict])
 │   ├── prompts/
@@ -69,8 +73,9 @@ backend/
 | Komponente | Verantwortung | Tests |
 |---|---|---|
 | `PromptTemplateLoader` | Jinja2-Environment, `render(template_name, ctx) -> str`. Templates beim App-Start geladen, nicht pro Request. | Unit (Snapshot) |
-| `NarrativeService` | Orchestriert Cache-Check → Daten laden → Prompt rendern → LLM-Call → Schema-validieren → Persistieren. | Unit + Integration |
+| `NarrativeService` | Orchestriert Cache-Check → Daten laden → Prompt rendern → LLM-Call → Schema-validieren → Persistieren. Enthält `UniverseContext` Pydantic-Value-Object als private Klasse (nur 1 Consumer im MVP). | Unit + Integration |
 | `LLMClient` (erweitert) | Akzeptiert `system: str \| list[dict[str, Any]] \| None`. Cost-Estimator versteht beide Fälle. | Unit |
+| `StockRepository` (erweitert) | Neue Methode `get(stock_id: UUID) -> Stock \| None`. Adapter-Implementation analog zu `get_by_ticker`. | Unit (Adapter-Test) |
 | `memos.py`-Router | 2 Endpoints, FastAPI-DI für Service-Injection, Pydantic-Request/Response-Schemas. | Integration |
 
 ---
@@ -87,11 +92,18 @@ NarrativeService.generate_memo(stock_id, run_id, lang="de", force_regenerate=Fal
   │       └─ wenn vorhanden + nicht force → return existing (0 Kosten, kein LLM-Call)
   │
   ├─ 2. Daten laden (parallel via asyncio.gather):
-  │       stock_repo.get(stock_id)                              → Stock
-  │       ranking_repo.get_for_stock(stock_id, run_id)          → list[Ranking]
-  │       ranking_repo.get_total_rank(stock_id, run_id)         → TotalRank
-  │       ranking_repo.get_universe_context(run_id)             → UniverseContext
-  │       (404 wenn eines davon None — vor LLM-Call abbrechen)
+  │       stock_repo.get(stock_id)                  → Stock          (404 wenn None)
+  │       run_repo.get_results(run_id)              → list[dict]     (404 wenn None)
+  │
+  │     Aus dem dict-list im Service ableiten (kein neuer Port nötig):
+  │       a. ranking_dict = next(r for r in results if r["ticker"] == stock.ticker)
+  │          → enthält total_rank, weighted_avg, is_sweet_spot, per_model_ranks
+  │          → 404 wenn der Stock nicht im Run drin ist
+  │       b. universe_context = UniverseContext(
+  │            n_stocks=len(results),
+  │            median_rank=median(r["total_rank"] for r in results),
+  │            top20_threshold=quantile([r["total_rank"] for r in results], 0.20),
+  │          )
   │
   ├─ 3. system_prompt = prompt_loader.render("narrative_system.de.md.j2", static_ctx)
   │     user_prompt   = prompt_loader.render("narrative_user.md.j2",       dynamic_ctx)
@@ -142,7 +154,7 @@ class NarrativeService:
         self,
         *,
         memo_repository: ResearchMemoRepository,
-        ranking_repository: RankingRepository,
+        run_repository: RankingRunRepository,
         stock_repository: StockRepository,
         llm_client: LLMClient,
         prompt_loader: PromptTemplateLoader,
@@ -315,6 +327,7 @@ Lebt unter `backend/tests/fixtures/llm/stub_anthropic_client.py`. Lädt JSON-Fix
 
 Implementation dieser Slice ist komplett, wenn:
 
+- [ ] `StockRepository.get(stock_id: UUID) -> Stock | None` als neue abstract-Methode + SQLA-Adapter-Implementation
 - [ ] `PromptTemplateLoader` (Jinja2) in `backend/infrastructure/llm/prompts/prompt_loader.py`
 - [ ] `narrative_system.de.md.j2` ausgefüllt mit Inhalt aus Parent-Spec §5.1 (Rollen-Definition, Modell-Beschreibungen, Sweet-Spot-Definition, Interpretations-Regeln, Ton, Disclaimer, Output-Format-Hinweis, 1× Few-Shot)
 - [ ] `narrative_system.en.md.j2` als Stub-Datei mit TODO-Kommentar
@@ -351,3 +364,4 @@ Implementation dieser Slice ist komplett, wenn:
 | Version | Datum | Autor | Änderung |
 |---|---|---|---|
 | Draft v1.0 | 2026-05-04 | Sheyla / Claude Code Opus 4.7 | Initiale Slice-Spec — schneidet Single-Memo-Pfad aus Parent-Spec heraus |
+| Draft v1.1 | 2026-05-04 | Sheyla / Claude Code Opus 4.7 | Realitäts-Korrektur vor Plan-Schreiben: Spec referenzierte nicht-existente Repo-Methoden (`stock_repo.get`, `ranking_repo.get_for_stock`, `ranking_repo.get_universe_context`). Korrigiert: `StockRepository.get` als kleine Erweiterung; ranking + universe context werden inline aus `RankingRunRepository.get_results()` abgeleitet (kein neuer Port). `UniverseContext` ist Service-internes Value-Object, nicht eigene Datei. |
