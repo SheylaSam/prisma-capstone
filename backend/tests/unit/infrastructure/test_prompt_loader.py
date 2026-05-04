@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from jinja2.exceptions import TemplateNotFound
 
 from backend.infrastructure.llm.prompts.prompt_loader import PromptTemplateLoader
 
@@ -44,7 +45,7 @@ def test_render_user_prompt_matches_snapshot() -> None:
 
 def test_render_unknown_template_raises() -> None:
     loader = PromptTemplateLoader()
-    with pytest.raises(Exception):  # Jinja2 TemplateNotFound oder ähnlich
+    with pytest.raises(TemplateNotFound):
         loader.render("does_not_exist.md.j2", {})
 
 
