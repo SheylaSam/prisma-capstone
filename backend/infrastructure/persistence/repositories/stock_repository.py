@@ -32,10 +32,7 @@ class SQLAStockRepository(StockRepository):
 
     async def get(self, stock_id: UUID) -> Stock | None:
         """Sucht einen Stock anhand seiner UUID."""
-        result = await self._session.scalars(
-            select(StockORM).where(StockORM.id == stock_id)
-        )
-        orm = result.one_or_none()
+        orm = await self._session.get(StockORM, stock_id)
         return self._to_domain(orm) if orm else None
 
     @staticmethod
