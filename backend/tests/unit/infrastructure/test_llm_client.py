@@ -297,5 +297,12 @@ async def test_estimate_messages_cost_handles_system_as_list() -> None:
             {"type": "text", "text": "block-two" * 50},
         ],
     )
-    # Sanity: cost is > 0 and a Decimal
-    assert cost > Decimal("0")
+    # Tight band check: messages=300 chars, system=900 chars (450+450),
+    # total=1200 chars → 1200/3=400 input tokens. Max output=200 tokens.
+    # Sonnet pricing: $3/1M input, $15/1M output
+    # → (400*3 + 200*15)/1M = 4200/1M = 0.0042 USD ± margin
+    expected_lo = Decimal("0.0040")
+    expected_hi = Decimal("0.0045")
+    assert (
+        expected_lo <= cost <= expected_hi
+    ), f"cost {cost} outside band [{expected_lo}, {expected_hi}]"
