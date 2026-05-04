@@ -11,6 +11,7 @@ In dieser Datei (alles Service-internes Detail):
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from statistics import median
 from typing import Any, Literal
@@ -139,12 +140,13 @@ class NarrativeService:
             if existing is not None:
                 return existing
 
-        # 2. Daten laden + 404-Pfade
-        stock = await self._stock_repo.get(stock_id)
+        # 2. Daten laden + 404-Pfade (parallel via asyncio.gather)
+        stock, results = await asyncio.gather(
+            self._stock_repo.get(stock_id),
+            self._run_repo.get_results(model_run_id),
+        )
         if stock is None:
             raise LookupError(f"Stock {stock_id} not found")
-
-        results = await self._run_repo.get_results(model_run_id)
         if results is None:
             raise LookupError(f"Run {model_run_id} not found")
 
