@@ -11,16 +11,19 @@ In dieser Datei (alles Service-internes Detail):
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from statistics import median
 from typing import Any, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
 from backend.domain.entities.research_memo import ResearchMemo
+from backend.domain.entities.stock import Stock
 from backend.domain.repositories.ranking_run_repository import RankingRunRepository
 from backend.domain.repositories.research_memo_repository import ResearchMemoRepository
 from backend.domain.repositories.stock_repository import StockRepository
+from backend.domain.schemas.research_memo_schema import ResearchMemoSchema
 from backend.infrastructure.llm.client import LLMClient
 from backend.infrastructure.llm.prompts.prompt_loader import PromptTemplateLoader
 
@@ -69,6 +72,30 @@ def _build_universe_context(results: list[dict[str, Any]]) -> UniverseContext:
     )
 
 
+def _rankings_for_template(ranking: dict[str, Any]) -> dict[str, dict[str, float | int]]:
+    """Wandelt das per_model_ranks-Dict + weighted_avg in ein
+    Template-freundliches dict[name, {rank, score}]-Format um.
+
+    Score-Daten sind zu diesem Zeitpunkt nicht alle in den Run-Results,
+    daher Score = 1 / rank als grobe Visualisierung. Spec sagt nichts
+    Strenges dazu, das Template zeigt nur eine Sichtbarmachung.
+    """
+    model_label = {
+        "quality_classic": "Quality Classic",
+        "alpha": "Alpha",
+        "trend_momentum": "Trend Momentum",
+        "value_alpha_potential": "Value Alpha Potential",
+        "diversification": "Diversification",
+    }
+    out: dict[str, dict[str, float | int]] = {}
+    per_model = ranking.get("per_model_ranks") or {}
+    for key, label in model_label.items():
+        rank = per_model.get(key)
+        if rank is not None:
+            out[label] = {"rank": int(rank), "score": round(1.0 / max(int(rank), 1), 4)}
+    return out
+
+
 class NarrativeService:
     """Memo-Generation. Spec §5."""
 
@@ -97,3 +124,119 @@ class NarrativeService:
         language: Literal["de", "en"] = "de",
     ) -> ResearchMemo | None:
         return await self._memo_repo.get(stock_id, model_run_id, language=language)
+
+    async def generate_memo(
+        self,
+        stock_id: UUID,
+        model_run_id: UUID,
+        *,
+        language: Literal["de", "en"] = "de",
+        force_regenerate: bool = False,
+    ) -> ResearchMemo:
+        # 1. Cache check
+        if not force_regenerate:
+            existing = await self._memo_repo.get(stock_id, model_run_id, language=language)
+            if existing is not None:
+                return existing
+
+        # 2. Daten laden + 404-Pfade
+        stock = await self._stock_repo.get(stock_id)
+        if stock is None:
+            raise LookupError(f"Stock {stock_id} not found")
+
+        results = await self._run_repo.get_results(model_run_id)
+        if results is None:
+            raise LookupError(f"Run {model_run_id} not found")
+
+        try:
+            ranking = _extract_ranking_for_ticker(results, ticker=stock.ticker)
+        except KeyError as exc:
+            raise LookupError(
+                f"Stock {stock.ticker} not in run {model_run_id}"
+            ) from exc
+
+        universe_context = _build_universe_context(results)
+
+        # 3. Prompts rendern
+        system_prompt = self._prompts.render(
+            f"narrative_system.{language}.md.j2", {}
+        )
+        user_prompt = self._prompts.render(
+            "narrative_user.md.j2",
+            {
+                "ticker": stock.ticker,
+                "name": stock.name,
+                "sector": stock.sector,
+                "country": stock.country,
+                "run_id": str(model_run_id),
+                "universe_name": "Universe",
+                "n_stocks": universe_context.n_stocks,
+                "median_rank": universe_context.median_rank,
+                "top20_threshold": universe_context.top20_threshold,
+                "rankings": _rankings_for_template(ranking),
+                "total_rank": ranking["total_rank"],
+                "sweet_spot": ranking["is_sweet_spot"],
+                "weights": "equal-weighted (0.20 each)",
+            },
+        )
+
+        # 4. LLM-Call mit Tool-use + Caching
+        response = await self._llm.messages_create(
+            model=self._model,
+            system=[
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            messages=[{"role": "user", "content": user_prompt}],
+            tools=[
+                {
+                    "name": "submit_memo",
+                    "description": "Submit the structured research memo.",
+                    "input_schema": ResearchMemoSchema.model_json_schema(),
+                }
+            ],
+            tool_choice={"type": "tool", "name": "submit_memo"},
+            max_tokens=2000,
+            feature="narrative_engine",
+        )
+
+        # 5. Tool-use Antwort → Pydantic-Validate
+        memo_schema = self._validate_tool_response(response, stock=stock, ranking=ranking)
+
+        # 6. Persist
+        memo_entity = ResearchMemo(
+            id=uuid4(),
+            stock_id=stock_id,
+            model_run_id=model_run_id,
+            language=language,
+            created_at=datetime.now(tz=UTC),
+            one_liner=memo_schema.one_liner,
+            ranking_interpretation=memo_schema.ranking_interpretation,
+            sweet_spot=memo_schema.sweet_spot,
+            sweet_spot_explanation=memo_schema.sweet_spot_explanation,
+            contradictions=list(memo_schema.contradictions),
+            key_strengths=list(memo_schema.key_strengths),
+            key_risks=list(memo_schema.key_risks),
+            confidence=memo_schema.confidence,
+            model_version=memo_schema.model_version,
+        )
+        await self._memo_repo.save(memo_entity)
+        return memo_entity
+
+    def _validate_tool_response(
+        self, response: Any, *, stock: Stock, ranking: dict[str, Any]
+    ) -> ResearchMemoSchema:
+        """Extrahiert tool_use-Block + Pydantic-Validate. Error-Memo-Pfad: Task 8."""
+        for block in response.content:
+            if (
+                getattr(block, "type", None) == "tool_use"
+                and getattr(block, "name", None) == "submit_memo"
+            ):
+                return ResearchMemoSchema.model_validate(block.input)
+        # Kein passender Block — Task 8 ergaenzt hier den error-memo-Pfad.
+        raise RuntimeError(
+            "No submit_memo tool_use block in response (Task 8: error-memo path)"
+        )

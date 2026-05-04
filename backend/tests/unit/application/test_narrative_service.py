@@ -1,8 +1,9 @@
 """Unit-Tests fuer NarrativeService — Helpers + Service-Logik."""
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
@@ -14,6 +15,7 @@ from backend.application.services.narrative_service import (
     _extract_ranking_for_ticker,
 )
 from backend.domain.entities.research_memo import ResearchMemo
+from backend.domain.entities.stock import Stock
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
@@ -165,3 +167,182 @@ async def test_get_memo_returns_none_when_missing() -> None:
     result = await service.get_memo(uuid4(), uuid4())
 
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Task 7 — NarrativeService.generate_memo
+# ---------------------------------------------------------------------------
+
+
+def _stock(stock_id: Any | None = None, ticker: str = "NESN") -> Stock:
+    return Stock(
+        id=stock_id or uuid4(),
+        ticker=ticker,
+        name="Nestle SA",
+        isin="CH0038863350",
+        sector="Consumer Staples",
+        country="CH",
+        currency="CHF",
+    )
+
+
+def _tool_use_response(memo_payload: dict[str, Any]) -> Any:
+    """Imitiert Anthropic-Response mit Tool-Use-Block."""
+    return SimpleNamespace(
+        id="msg_test",
+        usage=SimpleNamespace(input_tokens=2300, output_tokens=487),
+        content=[SimpleNamespace(type="tool_use", name="submit_memo", input=memo_payload)],
+        stop_reason="tool_use",
+    )
+
+
+async def test_generate_memo_returns_cached_when_exists_and_no_force() -> None:
+    stock_id, run_id = uuid4(), uuid4()
+    cached = _sample_memo(stock_id=stock_id, run_id=run_id)
+
+    memo_repo = AsyncMock()
+    memo_repo.get = AsyncMock(return_value=cached)
+    memo_repo.save = AsyncMock()
+
+    llm = AsyncMock()
+    service = NarrativeService(
+        memo_repository=memo_repo,
+        run_repository=AsyncMock(),
+        stock_repository=AsyncMock(),
+        llm_client=llm,
+        prompt_loader=AsyncMock(),
+    )
+
+    result = await service.generate_memo(stock_id, run_id, force_regenerate=False)
+
+    assert result is cached
+    memo_repo.save.assert_not_awaited()
+    llm.messages_create.assert_not_awaited()
+
+
+async def test_generate_memo_happy_path() -> None:
+    stock_id, run_id = uuid4(), uuid4()
+
+    memo_repo = AsyncMock()
+    memo_repo.get = AsyncMock(return_value=None)  # kein cache
+    memo_repo.save = AsyncMock()
+
+    stock_repo = AsyncMock()
+    stock_repo.get = AsyncMock(return_value=_stock(stock_id=stock_id))
+
+    run_repo = AsyncMock()
+    run_repo.get_results = AsyncMock(return_value=_sample_results())
+
+    payload = {
+        "ticker": "NESN",
+        "total_rank": 1,
+        "one_liner": "Defensiver Quality-Kern.",
+        "ranking_interpretation": "x" * 120,
+        "sweet_spot": True,
+        "sweet_spot_explanation": "Top 25% in 4 Modellen.",
+        "contradictions": [],
+        "key_strengths": ["Top 10% Quality"],
+        "key_risks": ["Bewertungs-Multiples"],
+        "confidence": "high",
+        "generated_at": "2026-05-04T10:00:00Z",
+        "model_version": "claude-sonnet-4-6",
+    }
+    llm = AsyncMock()
+    llm.messages_create = AsyncMock(return_value=_tool_use_response(payload))
+
+    prompt_loader = SimpleNamespace(
+        render=Mock(side_effect=lambda name, ctx: f"<rendered-{name}>")
+    )
+
+    service = NarrativeService(
+        memo_repository=memo_repo,
+        run_repository=run_repo,
+        stock_repository=stock_repo,
+        llm_client=llm,
+        prompt_loader=prompt_loader,
+    )
+
+    result = await service.generate_memo(stock_id, run_id)
+
+    # LLM wurde aufgerufen
+    llm.messages_create.assert_awaited_once()
+    call_kwargs = llm.messages_create.await_args.kwargs
+
+    # System ist eine Liste mit cache_control
+    assert isinstance(call_kwargs["system"], list)
+    assert call_kwargs["system"][0]["cache_control"] == {"type": "ephemeral"}
+
+    # Tool-use forced
+    assert call_kwargs["tool_choice"] == {"type": "tool", "name": "submit_memo"}
+    assert any(t["name"] == "submit_memo" for t in call_kwargs["tools"])
+
+    # feature-Tag fuer Cost-Tracking
+    assert call_kwargs["feature"] == "narrative_engine"
+
+    # Memo wurde persistiert
+    memo_repo.save.assert_awaited_once()
+    saved = memo_repo.save.await_args.args[0]
+    assert saved.stock_id == stock_id
+    assert saved.model_run_id == run_id
+    assert saved.one_liner == "Defensiver Quality-Kern."
+
+    # Returnwert ist die Entity
+    assert result.one_liner == "Defensiver Quality-Kern."
+
+
+async def test_generate_memo_404_when_stock_missing() -> None:
+    memo_repo = AsyncMock()
+    memo_repo.get = AsyncMock(return_value=None)
+    stock_repo = AsyncMock()
+    stock_repo.get = AsyncMock(return_value=None)
+
+    service = NarrativeService(
+        memo_repository=memo_repo,
+        run_repository=AsyncMock(),
+        stock_repository=stock_repo,
+        llm_client=AsyncMock(),
+        prompt_loader=AsyncMock(),
+    )
+
+    with pytest.raises(LookupError, match="Stock"):
+        await service.generate_memo(uuid4(), uuid4())
+
+
+async def test_generate_memo_404_when_run_missing() -> None:
+    memo_repo = AsyncMock()
+    memo_repo.get = AsyncMock(return_value=None)
+    stock_repo = AsyncMock()
+    stock_repo.get = AsyncMock(return_value=_stock())
+    run_repo = AsyncMock()
+    run_repo.get_results = AsyncMock(return_value=None)
+
+    service = NarrativeService(
+        memo_repository=memo_repo,
+        run_repository=run_repo,
+        stock_repository=stock_repo,
+        llm_client=AsyncMock(),
+        prompt_loader=AsyncMock(),
+    )
+
+    with pytest.raises(LookupError, match="Run"):
+        await service.generate_memo(uuid4(), uuid4())
+
+
+async def test_generate_memo_404_when_stock_not_in_run() -> None:
+    memo_repo = AsyncMock()
+    memo_repo.get = AsyncMock(return_value=None)
+    stock_repo = AsyncMock()
+    stock_repo.get = AsyncMock(return_value=_stock(ticker="UNKNOWN"))
+    run_repo = AsyncMock()
+    run_repo.get_results = AsyncMock(return_value=_sample_results())  # nur NESN/ROG/ABBN
+
+    service = NarrativeService(
+        memo_repository=memo_repo,
+        run_repository=run_repo,
+        stock_repository=stock_repo,
+        llm_client=AsyncMock(),
+        prompt_loader=AsyncMock(),
+    )
+
+    with pytest.raises(LookupError, match="UNKNOWN"):
+        await service.generate_memo(uuid4(), uuid4())
