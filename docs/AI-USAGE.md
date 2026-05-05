@@ -18,6 +18,22 @@ Pro PR mit substantieller Agent-Beteiligung ein Eintrag:
 
 ## Einträge
 
+## 2026-05-05 · Alpha-Modell — TDD-Implementation (Branch `feat/alpha-impl`, stacked auf `feat/trend-momentum-impl`)
+- **Agent**: Claude Code (Opus 4.7), Main-Context.
+- **Scope**: Viertes und letztes der Wave-2-Quant-Modelle. `AlphaModel` ersetzt `NotImplementedError`-Skeleton durch Multi-Horizon Sharpe-gewichtete Outperformance: 5 Horizonte (5/63/126/252/504 Tage) × Gewichte (0.10/0.15/0.25/0.30/0.20) + Sharpe-Tilt (0.05) + Z-Score-Normalisierung. Dynamische Gewichts-Umverteilung wenn Long-Horizonte fehlen (Spec §2 Edge-Case). 9 Tests (Constants, Multi-Horizon-Outperformer, Sharpe-Influence, Identical-Tie, Determinismus, Empty, Single-Ticker, Insufficient-Data, Short-History-Redistribution), **alle 9/9 grün beim ersten Run**. Volle Suite: 172 passed, mypy strict + ruff format/check clean.
+- **Spec-Deviations** (bewusst, dokumentiert im Modul-Docstring):
+  - **Equal-weighted Benchmark statt ^GSPC** (Spec §2). Begründung: Konsistenz mit den anderen 3 Wave-2-Modellen (Trend Momentum, Value Alpha Potential, Diversification), die alle dem Redesign-Pattern §3.1 folgen ("bewusst gegen cap-gewichtetes ^SSMI, das von Nestlé/Roche dominiert würde"). Spec-Beispiel `^GSPC` ist für CH-Tickers ohnehin sinnfrei.
+  - **SHARPE_WEIGHT = 0.05** (Spec §2 sagt "additiv" ohne Zahl). Skalen-Argument: annualisierte Sharpe-SD über SMI-Tickers ~7× grösser als Outperformance-SD; bei 0.20 würde Sharpe die Horizont-Gewichtung dominieren. 0.05 hält Sharpe als Quality-Tilt. Empirische Validierung im ersten Backtest.
+- **PR-Strategie**: PR #?? stacked auf `feat/trend-momentum-impl` (= aktueller TM+VAP-Branch nach Self-Merge von #63 in seinen Base). Wave-2 ist mit diesem PR abgeschlossen — alle 4 ausstehenden Modelle aus PR #26-Redesign implementiert.
+- **Was gut lief**:
+  - **4. Modell, 4. mal beim ersten Run grün** (Diversification 6/6, TM 8/8, VAP 7/7, Alpha 9/9). Spec-First-Diszplin + TDD-RED-Verify-Pattern haben sich für die ganze Wave bewährt — null Format-Iterationen, null Edge-Case-Bugs nach Implementation. Reflex `ruff format` + `ruff check` als CI-Mirror sitzt jetzt fest.
+  - **Sharpe-Influence-Test als Behavior-Anchor**: `test_lower_volatility_wins_at_similar_outperformance` konstruiert zwei Ticker mit *gleichem* deterministischen Mittelwert aber drastisch unterschiedlicher Daily-Vola. Test-Behauptung steht direkt aus Spec §2 ("Ticker mit gleicher Outperformance aber höherer Volatilität → tieferer Score"). Würde bei Tests-after vergessen, weil das Verhalten nicht direkt aus dem Code abzulesen ist.
+  - **Spec-Lücken-Auflösung als bewusste Design-Entscheidung**: Vor RED-Phase explizit User-Feedback eingeholt zu (a) Benchmark-Variante und (b) Sharpe-Gewicht. Beide Spec-Lücken klar als Deviations dokumentiert statt im Code-Kommentar versteckt. CLAUDE.md-Regel "Lieber eine präzise Nachfrage als eine falsche Annahme. Finanzmathematik verzeiht keine Ungenauigkeit" befolgt.
+- **Was nicht klappte**: Nichts substanzielles. `ruff format` musste 1× nachgezogen werden (multi-line tuple-formats), aber das war 30s Reflex.
+- **Methodisches Mini-Learning**: **Wave-2 abgeschlossen, Pattern verifiziert.** Vier Modelle, vier 1st-try-GREEN-Runs, vier sauber dokumentierte AI-USAGE-Einträge. Die Iron Law TDD-Pflicht (RED vor GREEN, Verify-RED vor Implementation) hat genau einen Bug gefangen, der Tests-after garantiert nicht gefangen hätte (Diversification Zero-Variance, AI-USAGE 2026-05-02). Eine Bug-Detection in 4 Modellen klingt nach wenig — aber das ist ein Bug pro 1.5h Implementation-Time, was die TDD-Mehrkosten klar amortisiert.
+- **Token-Kosten**: ~10k Tokens Opus 4.7; ~0.20 USD.
+- **Autor**: Fabia Holzer (mit Claude Code)
+
 ## 2026-05-03 · Value-Alpha-Potential-Modell — TDD-Implementation (Branch `feat/value-alpha-potential-impl`, stacked auf #62)
 - **Agent**: Claude Code (Opus 4.7), Main-Context.
 - **Scope**: Drittes von 4 ausstehenden Quant-Modellen aus PR #26-Redesign. `ValueAlphaPotentialModel` ersetzt `NotImplementedError`-Skeleton durch Rolling-Max-Alpha-Mean-Reversion: `alpha = pct_change(63) - benchmark.pct_change(63)`, `rolling_max = alpha.rolling(252, min_periods=68).max()`, `potential = rolling_max - alpha`. 7 Tests (Constants, Past-Star vs. Constant, At-Peak-Today/Negative-Potential-Edge-Case, Determinismus, Empty, Insufficient, Single-Ticker), **alle 7/7 grün beim ersten Run**. Volle Suite: 164 passed / 1 skipped, mypy strict + ruff format/check clean.
