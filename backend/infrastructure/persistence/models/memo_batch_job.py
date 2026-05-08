@@ -7,6 +7,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -36,7 +37,7 @@ class MemoBatchJobORM(Base):
     top_n: Mapped[int] = mapped_column(Integer, nullable=False)
     language: Mapped[str] = mapped_column(String(2), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
-    failed_stock_ids: Mapped[list[object]] = mapped_column(JSONB, nullable=False, server_default="[]")
+    failed_stock_ids: Mapped[list[object]] = mapped_column(JSONB, nullable=False, default=list)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -49,4 +50,5 @@ class MemoBatchJobORM(Base):
             "status IN ('pending', 'running', 'complete', 'partial', 'failed')",
             name="status",
         ),
+        Index("ix_memo_batch_jobs_model_run_id", "model_run_id"),
     )
