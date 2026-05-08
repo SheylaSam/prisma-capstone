@@ -11,17 +11,26 @@ In dieser Datei (alles Service-internes Detail):
 
 from __future__ import annotations
 
+import asyncio
 import json as _json
+import logging
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from statistics import median
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.application.services.cost_tracker import CostTracker
+from backend.domain.entities.memo_batch_job import MemoBatchJob
 from backend.domain.entities.research_memo import ResearchMemo
 from backend.domain.entities.stock import Stock
+from backend.domain.repositories.memo_batch_job_repository import MemoBatchJobRepository
 from backend.domain.repositories.ranking_run_repository import RankingRunRepository
 from backend.domain.repositories.research_memo_repository import ResearchMemoRepository
 from backend.domain.repositories.stock_repository import StockRepository
@@ -119,16 +128,27 @@ class NarrativeService:
         memo_repository: ResearchMemoRepository,
         run_repository: RankingRunRepository,
         stock_repository: StockRepository,
+        batch_repository: MemoBatchJobRepository,
         llm_client: LLMClient,
         prompt_loader: PromptTemplateLoader,
+        cost_tracker: CostTracker,
+        session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]],
         model: str = "claude-sonnet-4-6",
+        max_concurrent_batch_workers: int = 3,
+        stale_batch_timeout_seconds: int = 600,
     ) -> None:
         self._memo_repo = memo_repository
         self._run_repo = run_repository
         self._stock_repo = stock_repository
+        self._batch_repo = batch_repository
         self._llm = llm_client
         self._prompts = prompt_loader
+        self._cost_tracker = cost_tracker
+        self._session_factory = session_factory
         self._model = model
+        self._max_concurrent_batch_workers = max_concurrent_batch_workers
+        self._stale_batch_timeout_seconds = stale_batch_timeout_seconds
+        self._logger = logging.getLogger("backend.narrative_service")
 
     async def get_memo(
         self,
@@ -155,6 +175,57 @@ class NarrativeService:
             stock_repo=self._stock_repo,
             run_repo=self._run_repo,
         )
+
+    async def start_batch(
+        self,
+        model_run_id: UUID,
+        *,
+        top_n: int = 20,
+        language: Literal["de", "en"] = "de",
+    ) -> MemoBatchJob:
+        """Validiert Run, erstellt Job, spawned Background-Task, returnt sofort."""
+        # EN-Guard
+        if language == "en":
+            raise NotImplementedError(
+                "EN-Memos sind in dieser Slice noch nicht implementiert. "
+                "Bitte language='de' nutzen."
+            )
+        # top_n-Bounds
+        if not (1 <= top_n <= 100):
+            raise ValueError(f"top_n must be 1..100, got {top_n}")
+
+        # Run existiert?
+        results = await self._run_repo.get_results(model_run_id)
+        if results is None:
+            raise LookupError(f"Run {model_run_id} not found")
+
+        # Cost-Pre-Check (konservativ ~$0.025/Memo)
+        estimated_usd = Decimal(top_n) * Decimal("0.025")
+        await self._cost_tracker.check_cap(estimated_usd=estimated_usd)
+
+        # Job anlegen
+        job = MemoBatchJob(
+            id=uuid4(),
+            model_run_id=model_run_id,
+            top_n=top_n,
+            language=language,
+            status="pending",
+            failed_stock_ids=[],
+            error_message=None,
+            created_at=datetime.now(tz=UTC),
+        )
+        await self._batch_repo.save(job)
+
+        # Background-Task spawnen (fire-and-forget)
+        # _execute_batch wird in Task 8 implementiert; placeholder hier
+        asyncio.create_task(self._execute_batch(job.id))
+
+        return job
+
+    async def _execute_batch(self, job_id: UUID) -> None:
+        """Placeholder — wird in Task 8 implementiert."""
+        # TODO Task 8: load job, run batch, update status
+        pass
 
     async def _generate_memo_isolated(
         self,
