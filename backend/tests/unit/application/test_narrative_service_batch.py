@@ -1,5 +1,6 @@
 """Unit-Tests fuer NarrativeService Multi-Memo-Batch-Methoden."""
 
+from decimal import Decimal
 from typing import Any
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
@@ -60,9 +61,11 @@ class TestStartBatch:
         batch_repo.save.assert_awaited_once()
 
     async def test_start_batch_raises_for_en_language(self) -> None:
-        service = _make_service()
+        run_repo = AsyncMock()
+        service = _make_service(run_repository=run_repo)
         with pytest.raises(NotImplementedError, match="en"):
             await service.start_batch(uuid4(), language="en")
+        run_repo.get_results.assert_not_awaited()
 
     async def test_start_batch_raises_404_when_run_missing(self) -> None:
         run_repo = AsyncMock()
@@ -80,9 +83,9 @@ class TestStartBatch:
         cost_tracker = AsyncMock()
         cost_tracker.check_cap = AsyncMock(
             side_effect=BudgetCapExceeded(
-                current_usd=__import__("decimal").Decimal("19.00"),
-                attempted_usd=__import__("decimal").Decimal("0.50"),
-                cap_usd=__import__("decimal").Decimal("20.00"),
+                current_usd=Decimal("19.00"),
+                attempted_usd=Decimal("0.50"),
+                cap_usd=Decimal("20.00"),
             )
         )
 
@@ -93,9 +96,13 @@ class TestStartBatch:
             await service.start_batch(uuid4(), top_n=20)
 
     async def test_start_batch_validates_top_n_bounds(self) -> None:
-        service = _make_service()
+        run_repo = AsyncMock()
+        service = _make_service(run_repository=run_repo)
 
         with pytest.raises(ValueError, match="top_n"):
             await service.start_batch(uuid4(), top_n=0)
+        run_repo.get_results.assert_not_awaited()
+
         with pytest.raises(ValueError, match="top_n"):
             await service.start_batch(uuid4(), top_n=101)
+        run_repo.get_results.assert_not_awaited()
