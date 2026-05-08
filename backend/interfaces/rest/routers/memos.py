@@ -160,10 +160,15 @@ async def get_job(
         )
 
     memos = await service.list_memos_for_run(job.model_run_id, language=job.language)
+
+    # Get-Stock-Ticker-Map fuer das Frontend
+    stock_ids = [m.stock_id for m in memos]
+    ticker_map = await service.get_stock_ticker_map(stock_ids)
+
     memo_summaries = [
         BatchMemoSummary(
             stock_id=m.stock_id,
-            ticker=None,  # populated in Task 11 with stock-lookup
+            ticker=ticker_map.get(m.stock_id),  # None falls Stock geloescht (CASCADE-edge)
             one_liner=m.one_liner,
             is_error=(m.model_version == "error-fallback"),
         )
