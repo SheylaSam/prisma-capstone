@@ -460,3 +460,89 @@ class TestListMemosForRun:
         run_id = uuid4()
         await service.list_memos_for_run(run_id, language="de")
         memo_repo.list_by_run.assert_awaited_once_with(run_id, language="de")
+
+
+class TestGetStockTickerMap:
+    async def test_returns_ticker_for_known_stock(self) -> None:
+        from unittest.mock import MagicMock
+
+        from backend.domain.entities.stock import Stock
+
+        sid = uuid4()
+        stock = MagicMock(spec=Stock)
+        stock.ticker = "NESN"
+
+        stock_repo = AsyncMock()
+        stock_repo.get = AsyncMock(return_value=stock)
+        service = _make_service(stock_repository=stock_repo)
+
+        result = await service.get_stock_ticker_map([sid])
+
+        assert result == {sid: "NESN"}
+        stock_repo.get.assert_awaited_once_with(sid)
+
+    async def test_skips_deleted_stock(self) -> None:
+        """Falls Stock nicht mehr in der DB (CASCADE-delete): kein Eintrag in der Map."""
+        sid = uuid4()
+
+        stock_repo = AsyncMock()
+        stock_repo.get = AsyncMock(return_value=None)
+        service = _make_service(stock_repository=stock_repo)
+
+        result = await service.get_stock_ticker_map([sid])
+
+        assert result == {}
+
+    async def test_empty_input_returns_empty_dict(self) -> None:
+        stock_repo = AsyncMock()
+        service = _make_service(stock_repository=stock_repo)
+
+        result = await service.get_stock_ticker_map([])
+
+        assert result == {}
+        stock_repo.get.assert_not_awaited()
+
+    async def test_multiple_stocks_all_found(self) -> None:
+        from unittest.mock import MagicMock
+
+        from backend.domain.entities.stock import Stock
+
+        sid1, sid2, sid3 = uuid4(), uuid4(), uuid4()
+
+        def _make_stock(ticker: str) -> Stock:
+            s = MagicMock(spec=Stock)
+            s.ticker = ticker
+            return s
+
+        stocks = {sid1: _make_stock("NESN"), sid2: _make_stock("ROG"), sid3: _make_stock("ABBN")}
+        stock_repo = AsyncMock()
+        stock_repo.get = AsyncMock(side_effect=lambda sid: stocks.get(sid))
+        service = _make_service(stock_repository=stock_repo)
+
+        result = await service.get_stock_ticker_map([sid1, sid2, sid3])
+
+        assert result == {sid1: "NESN", sid2: "ROG", sid3: "ABBN"}
+        assert stock_repo.get.await_count == 3
+
+    async def test_partial_missing_stocks(self) -> None:
+        """Nur bekannte Stocks tauchen in der Map auf."""
+        from unittest.mock import MagicMock
+
+        from backend.domain.entities.stock import Stock
+
+        sid_known = uuid4()
+        sid_deleted = uuid4()
+
+        known_stock = MagicMock(spec=Stock)
+        known_stock.ticker = "NESN"
+
+        stock_repo = AsyncMock()
+        stock_repo.get = AsyncMock(
+            side_effect=lambda sid: known_stock if sid == sid_known else None
+        )
+        service = _make_service(stock_repository=stock_repo)
+
+        result = await service.get_stock_ticker_map([sid_known, sid_deleted])
+
+        assert result == {sid_known: "NESN"}
+        assert sid_deleted not in result

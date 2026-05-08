@@ -127,6 +127,7 @@ def test_get_job_returns_status_and_progress(app_with_mock_service: Any) -> None
     job_running = job.model_copy(update={"status": "running", "started_at": datetime.now(UTC)})
     service.get_batch_job = AsyncMock(return_value=job_running)
     service.list_memos_for_run = AsyncMock(return_value=[])
+    service.get_stock_ticker_map = AsyncMock(return_value={})
 
     with TestClient(app) as client:
         resp = client.get(f"/api/v1/memos/jobs/{job.id}")

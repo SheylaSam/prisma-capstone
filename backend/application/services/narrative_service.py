@@ -370,6 +370,20 @@ class NarrativeService:
         """Helper fuer GET /jobs/{id}-Response: alle Memos fuer den Run + Sprache."""
         return await self._memo_repo.list_by_run(model_run_id, language=language)
 
+    async def get_stock_ticker_map(self, stock_ids: list[UUID]) -> dict[UUID, str]:
+        """Lookup-Map stock_id -> ticker, fuer GET /jobs/{id}-Response.
+
+        N+1-Query (1 stock_repo.get pro stock_id). Akzeptabel weil top_n <= 100,
+        aber in einem Folge-PR koennte das durch list_by_ids-Bulk-Query ersetzt
+        werden falls Performance-Druck entsteht.
+        """
+        out: dict[UUID, str] = {}
+        for sid in stock_ids:
+            stock = await self._stock_repo.get(sid)
+            if stock is not None:
+                out[sid] = stock.ticker
+        return out
+
     async def _generate_memo_isolated(
         self,
         stock_id: UUID,
