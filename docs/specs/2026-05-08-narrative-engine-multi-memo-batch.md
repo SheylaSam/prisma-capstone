@@ -536,7 +536,19 @@ Pro Batch:
 
 ### 11.1 Plan-Code-Drift
 
-*(Wird nach Implementation gefüllt, analog `2026-05-04-narrative-engine-single-memo.md` §11.1.)*
+Gefunden während der 12 Build-Steps durch Two-Stage-Review (Spec-Reviewer + Code-Quality-Reviewer pro Task).
+
+| Plan-Annahme | Code-Realität | Fix-Commit |
+|---|---|---|
+| `down_revision="0005_research_memos"` | Echte revision-id ist nur `"0005"` (alembic generiert kurze IDs, keine Langnamen) | Task 3 (Subagent fand bei alembic-Inspektion) |
+| `server_default="[]"` für JSONB-Spalte (`failed_stock_ids`) | Invalid PG syntax — PostgreSQL erwartet SQL-Literal (`'[]'::jsonb`). Fix: `default=list` (Python-side default) statt `server_default` | Task 3 review-fix |
+| Index nur in Migration definiert | ORM braucht Index auch in `__table_args__` für autogenerate-Drift-Detection (sonst erzeugt `alembic revision --autogenerate` jedes Mal einen Schein-Drift) | Task 3 review-fix |
+| Test mit `uuid.uuid4()` direkt als `stock_id` in `research_memos` | FK-Violation — `research_memos` hat FK auf `stocks(id)`. Ohne vorherigen Stock-Insert schlägt jedes INSERT fehl | Task 5 review-fix (3 Stocks in `conftest.py` vor-seeden) |
+| `_execute_batch` catched nur `APITimeoutError` + `APIConnectionError` | Spec §8 listet `RateLimitError` als handled — nach LLMClient-Retry-Exhaustion bubbled das uncaught und crashte den Worker-Task | Task 8 review-fix |
+| `ticker: str = ""` Placeholder in Job-Response | Semantisch unsauber — leerer String ist nicht "unbekannt". `str \| None = None` korrekter bis Task 11 ticker-Lookup aus DB implementiert | Task 10 review-fix |
+| Inline-imports in `_execute_batch` für SQLA-Repos (Plan hatte lokale Import-Blöcke) | Module-level imports sind cleaner für Mocking in Tests (lokale Imports umgehen `unittest.mock.patch`) | Task 8 implementation-decision |
+
+**Offenes Issue (nicht in diesem Slice gefixt):** `BudgetCapExceeded`-Global-Exception-Handler gibt HTTP 503 zurück. Spec §6 sagt 402 für `/memos/batch`. Die Per-route `HTTPException(402)`-Behandlung im Batch-Endpoint ist korrekt, aber der globale Handler bleibt inkonsistent (würde 503 für andere Routen returnen, die BudgetCapExceeded nicht explizit fangen). Folge-Issue zur Konsolidierung — beide Memo-Endpoints (`/memos/generate` + `/memos/batch`) sollten konsistent 402 returnen, globaler Handler entweder entfernen oder auf 402 heben.
 
 ---
 
