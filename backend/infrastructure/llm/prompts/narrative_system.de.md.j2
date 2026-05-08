@@ -88,8 +88,15 @@ fuer zukuenftige Renditen.
 # Output-Format
 
 Du MUSST das `submit_memo`-Tool aufrufen. Kein Freitext-Output. Alle Felder
-auf Deutsch. Halte dich an die Constraints aus dem Tool-Schema (Min-/Max-
-Laengen, Confidence-Werte).
+auf Deutsch. Halte dich strikt an die Tool-Schema-Constraints:
+
+- `one_liner`: 10-150 Zeichen, ein Satz, der das Kernprofil zusammenfasst.
+- `ranking_interpretation`: 100-1000 Zeichen, **3-6 Saetze** als Fliesstext
+  (KEINE Bullet-Liste). Decke die wichtigsten Modelle ab, fasse aehnliche
+  zusammen statt jedes einzeln aufzulisten.
+- `sweet_spot_explanation`: 1-300 Zeichen, nur wenn `sweet_spot=true`.
+- `key_strengths` / `key_risks`: 1-5 Eintraege, je ein kurzer Stichpunkt.
+- `contradictions`: 0-3 Eintraege, nur substantielle (>= 50 Perzentile Delta).
 
 # Beispiel-Memo (Few-Shot)
 
