@@ -248,7 +248,17 @@ class NarrativeService:
             model_version=memo_schema.model_version,
         )
         await self._memo_repo.save(memo_entity)
-        return memo_entity
+
+        # UPSERT behaelt bei Konflikt die Original-id und Original-created_at
+        # der DB-Row. Damit der Service die *persisted* Werte zurueckgibt
+        # (nicht die frisch generierten in-memory Werte), Reload nach save().
+        persisted = await self._memo_repo.get(stock_id, model_run_id, language=language)
+        if persisted is None:
+            raise RuntimeError(
+                f"Memo for stock {stock_id} / run {model_run_id} verschwand "
+                "zwischen save() und reload — DB-Inkonsistenz?"
+            )
+        return persisted
 
     def _try_validate_tool_response(self, response: Any) -> ResearchMemoSchema | None:
         """Liefert die validierte Schema-Instanz oder None bei Fehler."""

@@ -116,22 +116,29 @@ def test_build_universe_context_with_one_stock() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _sample_memo(stock_id: Any = None, run_id: Any = None) -> ResearchMemo:
+def _sample_memo(
+    stock_id: Any = None,
+    run_id: Any = None,
+    *,
+    one_liner: str = "Kurzfassung des Memos.",
+    confidence: str = "high",
+    model_version: str = "claude-sonnet-4-6",
+) -> ResearchMemo:
     return ResearchMemo(
         id=uuid4(),
         stock_id=stock_id or uuid4(),
         model_run_id=run_id or uuid4(),
         language="de",
         created_at=datetime.now(tz=UTC),
-        one_liner="Kurzfassung des Memos.",
+        one_liner=one_liner,
         ranking_interpretation="x" * 120,
         sweet_spot=True,
         sweet_spot_explanation=None,
         contradictions=[],
         key_strengths=["Top 10% Quality"],
         key_risks=["Bewertungs-Multiples nicht im Modell"],
-        confidence="high",
-        model_version="claude-sonnet-4-6",
+        confidence=confidence,
+        model_version=model_version,
     )
 
 
@@ -225,8 +232,14 @@ async def test_generate_memo_returns_cached_when_exists_and_no_force() -> None:
 async def test_generate_memo_happy_path() -> None:
     stock_id, run_id = uuid4(), uuid4()
 
+    # Persisted memo (was die DB nach save() haelt — das was der Service zurueckgibt)
+    persisted = _sample_memo(
+        stock_id=stock_id, run_id=run_id, one_liner="Defensiver Quality-Kern."
+    )
+
     memo_repo = AsyncMock()
-    memo_repo.get = AsyncMock(return_value=None)  # kein cache
+    # 1. Call: Cache-Check → None. 2. Call: Reload nach save() → persisted.
+    memo_repo.get = AsyncMock(side_effect=[None, persisted])
     memo_repo.save = AsyncMock()
 
     stock_repo = AsyncMock()
@@ -286,8 +299,76 @@ async def test_generate_memo_happy_path() -> None:
     assert saved.model_run_id == run_id
     assert saved.one_liner == "Defensiver Quality-Kern."
 
-    # Returnwert ist die Entity
-    assert result.one_liner == "Defensiver Quality-Kern."
+    # B3: Returnwert ist die persisted Row (nicht die in-memory Entity).
+    assert result is persisted
+
+
+async def test_generate_memo_force_regenerate_returns_persisted_not_inmemory() -> None:
+    """B3 (PR #64 review): Bei force_regenerate=True macht das Repo ein UPSERT,
+    DB-Row behaelt die Original-id und Original-created_at. Service muss die
+    persisted Row zurueckgeben, sonst driftet die response-id von der DB-id.
+    """
+    stock_id, run_id = uuid4(), uuid4()
+
+    # Persisted Memo: simuliert die DB-Row mit *originalem* id + created_at
+    # (anders als das was der Service intern via uuid4()/datetime.now() generiert).
+    persisted = _sample_memo(
+        stock_id=stock_id, run_id=run_id, one_liner="Defensiver Quality-Kern."
+    )
+
+    memo_repo = AsyncMock()
+    # force_regenerate=True ueberspringt den Cache-Check → get() wird nur
+    # einmal nach save() aufgerufen (Reload).
+    memo_repo.get = AsyncMock(return_value=persisted)
+    memo_repo.save = AsyncMock()
+
+    stock_repo = AsyncMock()
+    stock_repo.get = AsyncMock(return_value=_stock(stock_id=stock_id))
+    run_repo = AsyncMock()
+    run_repo.get_results = AsyncMock(return_value=_sample_results())
+
+    payload = {
+        "ticker": "NESN",
+        "total_rank": 1,
+        "one_liner": "Defensiver Quality-Kern.",
+        "ranking_interpretation": "x" * 120,
+        "sweet_spot": True,
+        "sweet_spot_explanation": "Top 25% in 4 Modellen.",
+        "contradictions": [],
+        "key_strengths": ["Top 10% Quality"],
+        "key_risks": ["Bewertungs-Multiples"],
+        "confidence": "high",
+        "generated_at": "2026-05-04T10:00:00Z",
+        "model_version": "claude-sonnet-4-6",
+    }
+    llm = AsyncMock()
+    llm.messages_create = AsyncMock(return_value=_tool_use_response(payload))
+    prompt_loader = SimpleNamespace(render=Mock(side_effect=lambda name, ctx: f"<rendered-{name}>"))
+
+    service = NarrativeService(
+        memo_repository=memo_repo,
+        run_repository=run_repo,
+        stock_repository=stock_repo,
+        llm_client=llm,
+        prompt_loader=prompt_loader,  # type: ignore[arg-type]
+    )
+
+    result = await service.generate_memo(stock_id, run_id, force_regenerate=True)
+
+    # save() bekam die in-memory Entity (mit neuer uuid4 und neuem created_at)
+    memo_repo.save.assert_awaited_once()
+    saved = memo_repo.save.await_args.args[0]
+
+    # Sanity-Check des Bug-Szenarios: in-memory id != persisted id
+    assert saved.id != persisted.id
+
+    # Service liefert die persisted Row mit stabiler id + created_at
+    assert result is persisted
+    assert result.id == persisted.id
+    assert result.created_at == persisted.created_at
+
+    # Reload-Aufruf nach save() — exakt einmal mit den richtigen Args
+    memo_repo.get.assert_awaited_once_with(stock_id, run_id, language="de")
 
 
 async def test_generate_memo_404_when_stock_missing() -> None:
@@ -386,8 +467,16 @@ async def test_generate_memo_persists_error_memo_when_no_tool_use_block(
 
     stock_id, run_id = uuid4(), uuid4()
 
+    expected_error = _sample_memo(
+        stock_id=stock_id,
+        run_id=run_id,
+        one_liner="Memo-Generierung fehlgeschlagen — bitte Run regenerieren",
+        confidence="low",
+        model_version="error-fallback",
+    )
     memo_repo = AsyncMock()
-    memo_repo.get = AsyncMock(return_value=None)
+    # 1. Cache-Check: None. 2. Reload nach save(): persisted error-memo.
+    memo_repo.get = AsyncMock(side_effect=[None, expected_error])
     memo_repo.save = AsyncMock()
     stock_repo = AsyncMock()
     stock_repo.get = AsyncMock(return_value=_stock(stock_id=stock_id))
@@ -439,8 +528,15 @@ async def test_generate_memo_persists_error_memo_on_pydantic_fail(
 
     stock_id, run_id = uuid4(), uuid4()
 
+    expected_error = _sample_memo(
+        stock_id=stock_id,
+        run_id=run_id,
+        one_liner="Memo-Generierung fehlgeschlagen — bitte Run regenerieren",
+        confidence="low",
+        model_version="error-fallback",
+    )
     memo_repo = AsyncMock()
-    memo_repo.get = AsyncMock(return_value=None)
+    memo_repo.get = AsyncMock(side_effect=[None, expected_error])
     memo_repo.save = AsyncMock()
     stock_repo = AsyncMock()
     stock_repo.get = AsyncMock(return_value=_stock(stock_id=stock_id))
@@ -488,10 +584,18 @@ async def test_generate_memo_persists_error_memo_on_pydantic_fail(
 async def test_generate_memo_force_regenerate_bypasses_cache() -> None:
     """force_regenerate=True ueberspringt Cache-Check und ruft LLM."""
     stock_id, run_id = uuid4(), uuid4()
-    cached = _sample_memo(stock_id=stock_id, run_id=run_id)
+
+    # Was die DB nach UPSERT haelt (Reload-Result).
+    persisted = _sample_memo(
+        stock_id=stock_id,
+        run_id=run_id,
+        one_liner="Frischer Memo nach force_regenerate.",
+    )
 
     memo_repo = AsyncMock()
-    memo_repo.get = AsyncMock(return_value=cached)
+    # force_regenerate=True ueberspringt Cache-Check; get() wird nur einmal
+    # nach save() aufgerufen (Reload).
+    memo_repo.get = AsyncMock(return_value=persisted)
     memo_repo.save = AsyncMock()
 
     stock_repo = AsyncMock()
