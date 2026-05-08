@@ -310,3 +310,78 @@ class TestExecuteBatch:
         last_job: MemoBatchJob = batch_repo.save.await_args_list[-1].args[0]
         assert last_job.status == "failed"
         assert len(last_job.failed_stock_ids) == 2
+
+    async def test_execute_batch_partial_on_rate_limit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """RateLimitError nach LLMClient-Retry-Exhaustion: Stock in failed_stock_ids."""
+        import anthropic
+
+        from backend.domain.entities.memo_batch_job import MemoBatchJob
+
+        run_id = uuid4()
+        job_id = uuid4()
+        stock_ids = [uuid4(), uuid4()]
+
+        existing_job = MemoBatchJob(
+            id=job_id,
+            model_run_id=run_id,
+            top_n=2,
+            language="de",
+            status="pending",
+            failed_stock_ids=[],
+            error_message=None,
+            created_at=datetime.now(UTC),
+        )
+        batch_repo = AsyncMock()
+        batch_repo.get = AsyncMock(return_value=existing_job)
+        batch_repo.save = AsyncMock()
+
+        mock_session = AsyncMock()
+        mock_session_cm = AsyncMock()
+        mock_session_cm.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_cm.__aexit__ = AsyncMock(return_value=None)
+        session_factory = Mock(return_value=mock_session_cm)
+
+        async def _mock_get_results(_run_id: Any) -> list[dict[str, Any]]:
+            return [
+                {"stock_id": str(stock_ids[0]), "ticker": "A", "total_rank": 1},
+                {"stock_id": str(stock_ids[1]), "ticker": "B", "total_rank": 2},
+            ]
+
+        mock_run_repo_instance = AsyncMock()
+        mock_run_repo_instance.get_results = AsyncMock(side_effect=_mock_get_results)
+        mock_run_repo_class = Mock(return_value=mock_run_repo_instance)
+        mock_stock_repo_class = Mock(return_value=AsyncMock())
+
+        monkeypatch.setattr(
+            "backend.application.services.narrative_service.SQLARankingRunRepository",
+            mock_run_repo_class,
+        )
+        monkeypatch.setattr(
+            "backend.application.services.narrative_service.SQLAStockRepository",
+            mock_stock_repo_class,
+        )
+
+        service = _make_service(
+            batch_repository=batch_repo,
+            session_factory=session_factory,
+        )
+
+        # Erster Stock: ok. Zweiter: RateLimitError (nach LLMClient-Retry-Exhaustion).
+        async def _flaky(stock_id: Any, *_args: Any, **_kwargs: Any) -> None:
+            if stock_id == stock_ids[1]:
+                raise anthropic.RateLimitError(
+                    "rate limit",
+                    response=Mock(status_code=429),
+                    body={},
+                )
+
+        service._generate_memo_isolated = AsyncMock(side_effect=_flaky)  # type: ignore[method-assign]
+
+        await service._execute_batch(job_id)
+
+        last_job: MemoBatchJob = batch_repo.save.await_args_list[-1].args[0]
+        assert last_job.status == "partial"
+        assert stock_ids[1] in last_job.failed_stock_ids
+        assert stock_ids[0] not in last_job.failed_stock_ids
