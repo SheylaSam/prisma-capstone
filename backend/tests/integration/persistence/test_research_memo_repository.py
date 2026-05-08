@@ -150,6 +150,53 @@ class TestRoundtripAndUpsert:
         assert got_en is not None and got_en.one_liner == "English memo"
 
 
+class TestListByRun:
+    @pytest.mark.usefixtures("truncate_research_memos")
+    async def test_list_by_run_returns_memos(
+        self,
+        seed_stock_and_run: tuple[uuid.UUID, uuid.UUID],
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        stock_id, run_id = seed_stock_and_run
+        repo = SQLAResearchMemoRepository(session_factory)
+
+        # 3 memos with different stock UUIDs to avoid UNIQUE constraint on (stock_id, run_id, lang)
+        memos = [_new_memo(uuid.uuid4(), run_id, language="de") for _ in range(3)]
+        for m in memos:
+            await repo.save(m)
+
+        loaded = await repo.list_by_run(run_id, language="de")
+        assert len(loaded) == 3
+        assert {m.id for m in loaded} == {m.id for m in memos}
+
+    @pytest.mark.usefixtures("truncate_research_memos")
+    async def test_list_by_run_filters_language(
+        self,
+        seed_stock_and_run: tuple[uuid.UUID, uuid.UUID],
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        stock_id, run_id = seed_stock_and_run
+        repo = SQLAResearchMemoRepository(session_factory)
+
+        de_memo = _new_memo(stock_id, run_id, language="de")
+        en_memo = _new_memo(stock_id, run_id, language="en")
+        await repo.save(de_memo)
+        await repo.save(en_memo)
+
+        de_only = await repo.list_by_run(run_id, language="de")
+        assert len(de_only) == 1
+        assert de_only[0].id == de_memo.id
+
+    @pytest.mark.usefixtures("truncate_research_memos")
+    async def test_list_by_run_empty_when_no_memos(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        repo = SQLAResearchMemoRepository(session_factory)
+        loaded = await repo.list_by_run(uuid.uuid4(), language="de")
+        assert loaded == []
+
+
 class TestCascade:
     @pytest.mark.usefixtures("truncate_research_memos")
     async def test_delete_stock_cascades_to_memo(
