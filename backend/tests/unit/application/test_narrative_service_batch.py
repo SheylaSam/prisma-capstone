@@ -1,5 +1,6 @@
 """Unit-Tests fuer NarrativeService Multi-Memo-Batch-Methoden."""
 
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 from unittest.mock import AsyncMock, Mock
@@ -106,3 +107,206 @@ class TestStartBatch:
         with pytest.raises(ValueError, match="top_n"):
             await service.start_batch(uuid4(), top_n=101)
         run_repo.get_results.assert_not_awaited()
+
+
+class TestExecuteBatch:
+    async def test_execute_batch_all_success_marks_complete(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from backend.domain.entities.memo_batch_job import MemoBatchJob
+
+        run_id = uuid4()
+        job_id = uuid4()
+        stock_ids = [uuid4(), uuid4()]
+
+        existing_job = MemoBatchJob(
+            id=job_id,
+            model_run_id=run_id,
+            top_n=2,
+            language="de",
+            status="pending",
+            failed_stock_ids=[],
+            error_message=None,
+            created_at=datetime.now(UTC),
+        )
+        batch_repo = AsyncMock()
+        batch_repo.get = AsyncMock(return_value=existing_job)
+        batch_repo.save = AsyncMock()
+
+        # session_factory mock — gibt context manager zurueck
+        mock_session = AsyncMock()
+        mock_session_cm = AsyncMock()
+        mock_session_cm.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_cm.__aexit__ = AsyncMock(return_value=None)
+        session_factory = Mock(return_value=mock_session_cm)
+
+        async def _mock_get_results(_run_id: Any) -> list[dict[str, Any]]:
+            return [
+                {"stock_id": str(stock_ids[0]), "ticker": "A", "total_rank": 1},
+                {"stock_id": str(stock_ids[1]), "ticker": "B", "total_rank": 2},
+            ]
+
+        mock_run_repo_instance = AsyncMock()
+        mock_run_repo_instance.get_results = AsyncMock(side_effect=_mock_get_results)
+        mock_run_repo_class = Mock(return_value=mock_run_repo_instance)
+        mock_stock_repo_class = Mock(return_value=AsyncMock())
+
+        monkeypatch.setattr(
+            "backend.application.services.narrative_service.SQLARankingRunRepository",
+            mock_run_repo_class,
+        )
+        monkeypatch.setattr(
+            "backend.application.services.narrative_service.SQLAStockRepository",
+            mock_stock_repo_class,
+        )
+
+        service = _make_service(
+            batch_repository=batch_repo,
+            session_factory=session_factory,
+        )
+        # _generate_memo_isolated mocken — wir testen Worker-Loop, nicht Memo-Inhalt
+        service._generate_memo_isolated = AsyncMock()  # type: ignore[method-assign]
+
+        await service._execute_batch(job_id)
+
+        # save() mind. 2x: status=running, status=complete
+        assert batch_repo.save.await_count >= 2
+        last_save_call = batch_repo.save.await_args_list[-1]
+        last_job: MemoBatchJob = last_save_call.args[0]
+        assert last_job.status == "complete"
+        assert last_job.failed_stock_ids == []
+
+    async def test_execute_batch_partial_on_network_fail(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import anthropic
+
+        from backend.domain.entities.memo_batch_job import MemoBatchJob
+
+        run_id = uuid4()
+        job_id = uuid4()
+        stock_ids = [uuid4(), uuid4()]
+
+        existing_job = MemoBatchJob(
+            id=job_id,
+            model_run_id=run_id,
+            top_n=2,
+            language="de",
+            status="pending",
+            failed_stock_ids=[],
+            error_message=None,
+            created_at=datetime.now(UTC),
+        )
+        batch_repo = AsyncMock()
+        batch_repo.get = AsyncMock(return_value=existing_job)
+        batch_repo.save = AsyncMock()
+
+        mock_session = AsyncMock()
+        mock_session_cm = AsyncMock()
+        mock_session_cm.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_cm.__aexit__ = AsyncMock(return_value=None)
+        session_factory = Mock(return_value=mock_session_cm)
+
+        async def _mock_get_results(_run_id: Any) -> list[dict[str, Any]]:
+            return [
+                {"stock_id": str(stock_ids[0]), "ticker": "A", "total_rank": 1},
+                {"stock_id": str(stock_ids[1]), "ticker": "B", "total_rank": 2},
+            ]
+
+        mock_run_repo_instance = AsyncMock()
+        mock_run_repo_instance.get_results = AsyncMock(side_effect=_mock_get_results)
+        mock_run_repo_class = Mock(return_value=mock_run_repo_instance)
+        mock_stock_repo_class = Mock(return_value=AsyncMock())
+
+        monkeypatch.setattr(
+            "backend.application.services.narrative_service.SQLARankingRunRepository",
+            mock_run_repo_class,
+        )
+        monkeypatch.setattr(
+            "backend.application.services.narrative_service.SQLAStockRepository",
+            mock_stock_repo_class,
+        )
+
+        service = _make_service(
+            batch_repository=batch_repo,
+            session_factory=session_factory,
+        )
+
+        # Erster Stock: ok. Zweiter: APITimeoutError.
+        async def _flaky(stock_id: Any, *_args: Any, **_kwargs: Any) -> None:
+            if stock_id == stock_ids[1]:
+                raise anthropic.APITimeoutError(request=Mock())
+
+        service._generate_memo_isolated = AsyncMock(side_effect=_flaky)  # type: ignore[method-assign]
+
+        await service._execute_batch(job_id)
+
+        last_job: MemoBatchJob = batch_repo.save.await_args_list[-1].args[0]
+        assert last_job.status == "partial"
+        assert stock_ids[1] in last_job.failed_stock_ids
+        assert stock_ids[0] not in last_job.failed_stock_ids
+
+    async def test_execute_batch_all_fail_marks_failed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import anthropic
+
+        from backend.domain.entities.memo_batch_job import MemoBatchJob
+
+        run_id = uuid4()
+        job_id = uuid4()
+        stock_ids = [uuid4(), uuid4()]
+
+        existing_job = MemoBatchJob(
+            id=job_id,
+            model_run_id=run_id,
+            top_n=2,
+            language="de",
+            status="pending",
+            failed_stock_ids=[],
+            error_message=None,
+            created_at=datetime.now(UTC),
+        )
+        batch_repo = AsyncMock()
+        batch_repo.get = AsyncMock(return_value=existing_job)
+        batch_repo.save = AsyncMock()
+
+        mock_session = AsyncMock()
+        mock_session_cm = AsyncMock()
+        mock_session_cm.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_cm.__aexit__ = AsyncMock(return_value=None)
+        session_factory = Mock(return_value=mock_session_cm)
+
+        async def _mock_get_results(_run_id: Any) -> list[dict[str, Any]]:
+            return [
+                {"stock_id": str(stock_ids[0]), "ticker": "A", "total_rank": 1},
+                {"stock_id": str(stock_ids[1]), "ticker": "B", "total_rank": 2},
+            ]
+
+        mock_run_repo_instance = AsyncMock()
+        mock_run_repo_instance.get_results = AsyncMock(side_effect=_mock_get_results)
+        mock_run_repo_class = Mock(return_value=mock_run_repo_instance)
+        mock_stock_repo_class = Mock(return_value=AsyncMock())
+
+        monkeypatch.setattr(
+            "backend.application.services.narrative_service.SQLARankingRunRepository",
+            mock_run_repo_class,
+        )
+        monkeypatch.setattr(
+            "backend.application.services.narrative_service.SQLAStockRepository",
+            mock_stock_repo_class,
+        )
+
+        service = _make_service(
+            batch_repository=batch_repo,
+            session_factory=session_factory,
+        )
+        service._generate_memo_isolated = AsyncMock(  # type: ignore[method-assign]
+            side_effect=anthropic.APIConnectionError(request=Mock())
+        )
+
+        await service._execute_batch(job_id)
+
+        last_job: MemoBatchJob = batch_repo.save.await_args_list[-1].args[0]
+        assert last_job.status == "failed"
+        assert len(last_job.failed_stock_ids) == 2
