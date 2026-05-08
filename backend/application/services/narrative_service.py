@@ -334,6 +334,42 @@ class NarrativeService:
         )
         await self._batch_repo.save(final)
 
+    async def get_batch_job(self, job_id: UUID) -> MemoBatchJob | None:
+        """Laedt Job; bei status=running mit started_at>STALE_TIMEOUT macht
+        lazy-cleanup (Stale-Job-Recovery nach Server-Crash).
+
+        Spec §8 Stale-Job-Cleanup: Job-Status bleibt nach Server-Crash auf
+        'running'. Wir markieren ihn beim ersten GET als 'failed', damit
+        der User klar sieht dass der Batch tot ist.
+        """
+        job = await self._batch_repo.get(job_id)
+        if job is None:
+            return None
+        if job.status == "running" and job.started_at is not None:
+            elapsed = (datetime.now(tz=UTC) - job.started_at).total_seconds()
+            if elapsed > self._stale_batch_timeout_seconds:
+                stale = job.model_copy(
+                    update={
+                        "status": "failed",
+                        "completed_at": datetime.now(tz=UTC),
+                        "error_message": (
+                            "Job stale — Server-Restart oder Crash waehrend Ausfuehrung"
+                        ),
+                    }
+                )
+                await self._batch_repo.save(stale)
+                return stale
+        return job
+
+    async def list_memos_for_run(
+        self,
+        model_run_id: UUID,
+        *,
+        language: Literal["de", "en"] = "de",
+    ) -> list[ResearchMemo]:
+        """Helper fuer GET /jobs/{id}-Response: alle Memos fuer den Run + Sprache."""
+        return await self._memo_repo.list_by_run(model_run_id, language=language)
+
     async def _generate_memo_isolated(
         self,
         stock_id: UUID,

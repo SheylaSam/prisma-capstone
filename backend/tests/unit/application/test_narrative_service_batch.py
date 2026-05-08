@@ -385,3 +385,78 @@ class TestExecuteBatch:
         assert last_job.status == "partial"
         assert stock_ids[1] in last_job.failed_stock_ids
         assert stock_ids[0] not in last_job.failed_stock_ids
+
+
+class TestGetBatchJob:
+    async def test_returns_none_for_unknown_id(self) -> None:
+        batch_repo = AsyncMock()
+        batch_repo.get = AsyncMock(return_value=None)
+        service = _make_service(batch_repository=batch_repo)
+
+        result = await service.get_batch_job(uuid4())
+        assert result is None
+
+    async def test_returns_running_job_when_recent(self) -> None:
+        from backend.domain.entities.memo_batch_job import MemoBatchJob
+
+        recent_start = datetime.now(UTC)
+        job = MemoBatchJob(
+            id=uuid4(),
+            model_run_id=uuid4(),
+            top_n=20,
+            language="de",
+            status="running",
+            failed_stock_ids=[],
+            error_message=None,
+            created_at=recent_start,
+            started_at=recent_start,
+        )
+        batch_repo = AsyncMock()
+        batch_repo.get = AsyncMock(return_value=job)
+        batch_repo.save = AsyncMock()
+        service = _make_service(batch_repository=batch_repo)
+
+        result = await service.get_batch_job(job.id)
+        assert result is not None
+        assert result.status == "running"
+        # save() NICHT gerufen — kein cleanup noetig
+        batch_repo.save.assert_not_awaited()
+
+    async def test_marks_stale_running_as_failed(self) -> None:
+        from datetime import timedelta
+
+        from backend.domain.entities.memo_batch_job import MemoBatchJob
+
+        old_start = datetime.now(UTC) - timedelta(seconds=700)  # > 600s default timeout
+        job = MemoBatchJob(
+            id=uuid4(),
+            model_run_id=uuid4(),
+            top_n=20,
+            language="de",
+            status="running",
+            failed_stock_ids=[],
+            error_message=None,
+            created_at=old_start,
+            started_at=old_start,
+        )
+        batch_repo = AsyncMock()
+        batch_repo.get = AsyncMock(return_value=job)
+        batch_repo.save = AsyncMock()
+        service = _make_service(batch_repository=batch_repo)
+
+        result = await service.get_batch_job(job.id)
+        assert result is not None
+        assert result.status == "failed"
+        assert "stale" in (result.error_message or "").lower()
+        batch_repo.save.assert_awaited_once()
+
+
+class TestListMemosForRun:
+    async def test_delegates_to_repo(self) -> None:
+        memo_repo = AsyncMock()
+        memo_repo.list_by_run = AsyncMock(return_value=[])
+        service = _make_service(memo_repository=memo_repo)
+
+        run_id = uuid4()
+        await service.list_memos_for_run(run_id, language="de")
+        memo_repo.list_by_run.assert_awaited_once_with(run_id, language="de")
