@@ -45,10 +45,17 @@ class DiversificationModel:
 
         tickers: list[str] = list(prices.columns)
 
+        # n=1 ist semantisch keine Diversification-Aussage (kein zweiter Ticker
+        # zum Korrelieren). rank=1 / confidence="low" ist die kanonische
+        # "no-rank-but-valid"-Antwort, unabhängig von der Datenpunkt-Anzahl —
+        # bewusst VOR dem MIN_DATAPOINTS-Check.
         if len(tickers) == 1:
             return [ModelRankingResult(ticker=tickers[0], score=None, rank=1, confidence="low")]
 
-        returns = prices.pct_change().dropna(how="all")
+        # fill_method=None: pandas' deprecated default 'pad' würde mid-series NaN
+        # forward-fillen → künstliche 0%-Returns verfälschen Vola/Korrelation.
+        # Spec §5: returns = prices.pct_change().dropna() — Zeilen droppen, nicht fillen.
+        returns = prices.pct_change(fill_method=None).dropna()
         if len(returns) < _MIN_DATAPOINTS:
             return [
                 ModelRankingResult(ticker=t, score=None, rank=None, confidence="low")

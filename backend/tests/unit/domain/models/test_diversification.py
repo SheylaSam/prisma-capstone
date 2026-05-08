@@ -64,6 +64,50 @@ class TestDiversificationFormula:
         prices = _make_prices(returns)
         assert _run(prices) == _run(prices)
 
+    def test_two_ticker_universe_ranks_both(self) -> None:
+        """Spec §5 Edge-Case: ``n = 2 Ticker`` — Korrelation = ±1.0, Ledoit-Wolf
+        bleibt stabil. Beide Ticker müssen valide gerankt werden, der mit der
+        niedrigeren Vola gewinnt (Spec: Score = 2 / (volatility + avg_correlation)).
+        """
+        rng = np.random.default_rng(17)
+        n = 60
+        index = pd.date_range("2024-01-01", periods=n, freq="B")
+        returns = pd.DataFrame(
+            {
+                "LOW_VOL": rng.normal(0.0005, 0.005, n),
+                "HIGH_VOL": rng.normal(0.0005, 0.025, n),
+            },
+            index=index,
+        )
+        prices = _make_prices(returns)
+
+        ranks = _run(prices)
+        assert ranks["LOW_VOL"] == 1
+        assert ranks["HIGH_VOL"] == 2
+
+    def test_tied_scores_yield_tied_ranks_method_min(self) -> None:
+        """Spec §6 Ranking-Konvention: Gleichstand → gleicher Rang
+        (``method='min'``), nächster Rang springt.
+
+        Zwei identische Preisreihen → identischer Score → beide rank=1; ein
+        dritter Ticker mit höherer Vola → rank=3 (nicht 2). Schützt
+        ``_rank``-Loop-Logik gegen Off-by-one-Regression.
+        """
+        rng = np.random.default_rng(23)
+        n = 60
+        index = pd.date_range("2024-01-01", periods=n, freq="B")
+        twin = rng.normal(0.0005, 0.005, n)
+        wide = rng.normal(0.0005, 0.025, n)
+        returns = pd.DataFrame(
+            {"TWIN_A": twin, "TWIN_B": twin, "WIDE": wide},
+            index=index,
+        )
+        prices = _make_prices(returns)
+
+        ranks = _run(prices)
+        assert ranks["TWIN_A"] == ranks["TWIN_B"] == 1
+        assert ranks["WIDE"] == 3
+
 
 class TestDiversificationEdgeCases:
     def test_empty_universe_returns_empty(self) -> None:
@@ -94,6 +138,35 @@ class TestDiversificationEdgeCases:
         results = DiversificationModel().run(prices=prices)
         assert all(r.rank is None for r in results)
         assert all(r.confidence == "low" for r in results)
+
+    def test_mid_series_nan_drops_rows_not_forward_filled(self) -> None:
+        """Spec §5: ``returns = prices.pct_change().dropna()`` — Mid-Series-NaN
+        müssen *Zeilen entfernen*, nicht still forward-filled werden.
+
+        Yahoo-Realität (gesperrter Handel, late listings, Holiday-Mismatches)
+        produziert mid-series NaN. Pandas-Default ``fill_method='pad'`` (deprecated)
+        forward-fillt diese stillschweigend → NaN-Tage werden 0%-Returns →
+        Vola/Korrelation verfälscht, ohne dass der Algorithmus es bemerkt.
+
+        Setup: 70 Tage, 50 NaN-Mid in A. Spec-konform (``fill_method=None``)
+        droppt die NaN-Zeilen → 18 valide Rows < MIN_DATAPOINTS → all rank=None.
+        Bei forward-fill (Bug) bleiben ~69 Zeilen → A bekäme einen
+        artificially-low-volatility-Score und würde Rang 1 belegen.
+        """
+        rng = np.random.default_rng(11)
+        n = 70
+        index = pd.date_range("2024-01-01", periods=n, freq="B")
+        a_prices = (1 + rng.normal(0.0005, 0.010, n)).cumprod() * 100
+        b_prices = (1 + rng.normal(0.0005, 0.012, n)).cumprod() * 100
+        c_prices = (1 + rng.normal(0.0005, 0.015, n)).cumprod() * 100
+        prices = pd.DataFrame({"A": a_prices, "B": b_prices, "C": c_prices}, index=index)
+        # 50 mid-series NaN in A: Spec-konformes dropna() reduziert Returns < MIN_DATAPOINTS
+        prices.iloc[5:55, 0] = np.nan
+
+        ranks = _run(prices)
+        assert all(rank is None for rank in ranks.values()), (
+            f"Mid-NaN müssen Zeilen droppen (nicht forward-filled werden), ranks={ranks}"
+        )
 
     def test_zero_variance_ticker_gets_no_rank(self) -> None:
         """Ticker mit konstanten Preisen → std=0 → rank=None, confidence='low'."""
