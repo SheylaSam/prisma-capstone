@@ -24,7 +24,7 @@ class BatchProgress(BaseModel):
 
 class BatchMemoSummary(BaseModel):
     stock_id: UUID
-    ticker: str
+    ticker: str | None = None  # populated in Task 11 with stock-lookup
     one_liner: str
     is_error: bool
 
