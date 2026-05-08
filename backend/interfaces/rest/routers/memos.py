@@ -1,6 +1,12 @@
-"""POST /memos/generate + GET /memos/{stock_id}/{run_id}.
+"""POST /memos/generate + GET /memos/{stock_id}/{run_id} +
+POST /memos/batch + GET /memos/jobs/{job_id}.
 
-Spec: docs/specs/2026-05-04-narrative-engine-single-memo.md §6.
+Spec: docs/specs/2026-05-04-narrative-engine-single-memo.md §6
+      docs/specs/2026-05-08-narrative-engine-multi-memo-batch.md §6
+
+Route-Reihenfolge: statische Pfade (/generate, /batch, /jobs/{job_id})
+MUESSEN vor dem parametrischen Catch-All (/{stock_id}/{run_id}) registriert
+werden, da FastAPI Routen in Deklarationsreihenfolge matched.
 """
 
 from datetime import datetime
@@ -13,7 +19,15 @@ from pydantic import BaseModel
 
 from backend.application.services.narrative_service import NarrativeService
 from backend.domain.entities.research_memo import ContradictionItem, ResearchMemo
+from backend.domain.errors import BudgetCapExceeded
 from backend.interfaces.rest.dependencies import get_narrative_service
+from backend.interfaces.rest.schemas.memo_batch import (
+    BatchJobAcceptedResponse,
+    BatchJobResponse,
+    BatchMemoSummary,
+    BatchProgress,
+    BatchRequest,
+)
 
 router = APIRouter(prefix="/memos", tags=["memos"])
 
@@ -65,6 +79,11 @@ class MemoResponse(BaseModel):
         )
 
 
+# ---------------------------------------------------------------------------
+# Static-prefix routes — MUST be declared before /{stock_id}/{run_id}
+# ---------------------------------------------------------------------------
+
+
 @router.post("/generate", response_model=MemoResponse)
 async def generate_memo(
     request: GenerateMemoRequest,
@@ -85,6 +104,95 @@ async def generate_memo(
             detail="Anthropic API timeout — bitte erneut versuchen",
         ) from exc
     return MemoResponse.from_entity(memo)
+
+
+@router.post(
+    "/batch",
+    response_model=BatchJobAcceptedResponse,
+    status_code=202,
+)
+async def post_batch(
+    body: BatchRequest,
+    service: NarrativeService = Depends(get_narrative_service),
+) -> BatchJobAcceptedResponse:
+    """Startet einen asynchronen Batch-Memo-Run fuer die Top-N Stocks eines Runs.
+
+    Gibt 202 Accepted zurueck — der eigentliche Batch laeuft im Hintergrund.
+    Status-Polling via GET /memos/jobs/{job_id}.
+    """
+    try:
+        job = await service.start_batch(
+            body.model_run_id,
+            top_n=body.top_n,
+            language=body.language,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except BudgetCapExceeded as exc:
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
+    except NotImplementedError as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
+
+    return BatchJobAcceptedResponse(
+        job_id=job.id,
+        model_run_id=job.model_run_id,
+        top_n=job.top_n,
+        language=job.language,
+        status="pending",
+        created_at=job.created_at,
+    )
+
+
+@router.get(
+    "/jobs/{job_id}",
+    response_model=BatchJobResponse,
+)
+async def get_job(
+    job_id: UUID,
+    service: NarrativeService = Depends(get_narrative_service),
+) -> BatchJobResponse:
+    """Liefert aktuellen Job-Status inkl. Progress und Memo-Zusammenfassung."""
+    job = await service.get_batch_job(job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job {job_id} not found",
+        )
+
+    memos = await service.list_memos_for_run(job.model_run_id, language=job.language)
+    memo_summaries = [
+        BatchMemoSummary(
+            stock_id=m.stock_id,
+            ticker="",  # Placeholder — Stock-Ticker-Lookup folgt in Task 11
+            one_liner=m.one_liner,
+            is_error=(m.model_version == "error-fallback"),
+        )
+        for m in memos
+    ]
+
+    return BatchJobResponse(
+        job_id=job.id,
+        model_run_id=job.model_run_id,
+        top_n=job.top_n,
+        language=job.language,
+        status=job.status,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+        progress=BatchProgress(
+            expected=job.top_n,
+            completed=len(memos),
+            failed=len(job.failed_stock_ids),
+        ),
+        failed_stock_ids=job.failed_stock_ids,
+        error_message=job.error_message,
+        memos=memo_summaries,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Parametric catch-all — MUST be declared last
+# ---------------------------------------------------------------------------
 
 
 @router.get("/{stock_id}/{run_id}", response_model=MemoResponse)
