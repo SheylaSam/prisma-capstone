@@ -147,6 +147,31 @@ class NarrativeService:
         language: Literal["de", "en"] = "de",
         force_regenerate: bool = False,
     ) -> ResearchMemo:
+        return await self._generate_memo_isolated(
+            stock_id,
+            model_run_id,
+            language=language,
+            force_regenerate=force_regenerate,
+            stock_repo=self._stock_repo,
+            run_repo=self._run_repo,
+        )
+
+    async def _generate_memo_isolated(
+        self,
+        stock_id: UUID,
+        model_run_id: UUID,
+        *,
+        language: Literal["de", "en"] = "de",
+        force_regenerate: bool = False,
+        stock_repo: StockRepository,
+        run_repo: RankingRunRepository,
+    ) -> ResearchMemo:
+        """Memo-Generation mit explizit injizierten Repos.
+
+        Public generate_memo nutzt Service-eigene Repos. Background-Worker
+        (_execute_batch in Task 8) nutzt isolated Repos via session_factory
+        pro Worker (B1-Lehre — geteilte AsyncSession ist nicht concurrent-safe).
+        """
         # Guard: EN-Template ist Stub (siehe narrative_system.en.md.j2).
         # Frueher Bail-Out verhindert Token-Verbrauch fuer Garbage-Prompt.
         # Wird entfernt sobald EN-Template gefuellt ist (Folge-PR).
@@ -166,10 +191,10 @@ class NarrativeService:
         # `asyncio.gather` darf hier NICHT verwendet werden: stock_repo und
         # run_repo teilen sich per FastAPI-DI dieselbe AsyncSession, und
         # `AsyncSession` ist nicht safe fuer concurrent use → IllegalStateChangeError.
-        stock = await self._stock_repo.get(stock_id)
+        stock = await stock_repo.get(stock_id)
         if stock is None:
             raise LookupError(f"Stock {stock_id} not found")
-        results = await self._run_repo.get_results(model_run_id)
+        results = await run_repo.get_results(model_run_id)
         if results is None:
             raise LookupError(f"Run {model_run_id} not found")
 
