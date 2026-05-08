@@ -11,7 +11,6 @@ In dieser Datei (alles Service-internes Detail):
 
 from __future__ import annotations
 
-import asyncio
 import json as _json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -163,13 +162,14 @@ class NarrativeService:
             if existing is not None:
                 return existing
 
-        # 2. Daten laden + 404-Pfade (parallel via asyncio.gather)
-        stock, results = await asyncio.gather(
-            self._stock_repo.get(stock_id),
-            self._run_repo.get_results(model_run_id),
-        )
+        # 2. Daten laden + 404-Pfade (sequenziell, Spec §4).
+        # `asyncio.gather` darf hier NICHT verwendet werden: stock_repo und
+        # run_repo teilen sich per FastAPI-DI dieselbe AsyncSession, und
+        # `AsyncSession` ist nicht safe fuer concurrent use → IllegalStateChangeError.
+        stock = await self._stock_repo.get(stock_id)
         if stock is None:
             raise LookupError(f"Stock {stock_id} not found")
+        results = await self._run_repo.get_results(model_run_id)
         if results is None:
             raise LookupError(f"Run {model_run_id} not found")
 
