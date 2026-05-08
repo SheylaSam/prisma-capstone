@@ -13,8 +13,9 @@ from backend.domain.entities.memo_batch_job import MemoBatchJob
 pytestmark = pytest.mark.unit
 
 
-def _valid_payload() -> dict[str, Any]:
-    return {
+def _valid_payload(**overrides: Any) -> dict[str, Any]:
+    """Default valid payload fuer MemoBatchJob. Override via kwargs."""
+    payload: dict[str, Any] = {
         "id": uuid4(),
         "model_run_id": uuid4(),
         "top_n": 20,
@@ -26,6 +27,8 @@ def _valid_payload() -> dict[str, Any]:
         "started_at": None,
         "completed_at": None,
     }
+    payload.update(overrides)
+    return payload
 
 
 class TestMemoBatchJobValid:
@@ -51,25 +54,21 @@ class TestMemoBatchJobFrozen:
 
 class TestMemoBatchJobConstraints:
     def test_top_n_too_low_raises(self) -> None:
-        payload = _valid_payload()
-        payload["top_n"] = 0
         with pytest.raises(ValidationError):
-            MemoBatchJob(**payload)
+            MemoBatchJob(**_valid_payload(top_n=0))
 
     def test_top_n_too_high_raises(self) -> None:
-        payload = _valid_payload()
-        payload["top_n"] = 101
         with pytest.raises(ValidationError):
-            MemoBatchJob(**payload)
+            MemoBatchJob(**_valid_payload(top_n=101))
 
     def test_invalid_status_raises(self) -> None:
-        payload = _valid_payload()
-        payload["status"] = "unknown"
         with pytest.raises(ValidationError):
-            MemoBatchJob(**payload)
+            MemoBatchJob(**_valid_payload(status="unknown"))
 
     def test_invalid_language_raises(self) -> None:
-        payload = _valid_payload()
-        payload["language"] = "fr"
         with pytest.raises(ValidationError):
-            MemoBatchJob(**payload)
+            MemoBatchJob(**_valid_payload(language="fr"))
+
+    def test_error_message_too_long_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            MemoBatchJob(**_valid_payload(error_message="x" * 1001))
