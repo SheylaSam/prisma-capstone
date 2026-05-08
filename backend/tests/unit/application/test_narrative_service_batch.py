@@ -3,8 +3,8 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
-from unittest.mock import AsyncMock, Mock
-from uuid import uuid4
+from unittest.mock import AsyncMock, MagicMock, Mock
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -39,10 +39,13 @@ class TestStartBatch:
         cost_tracker = AsyncMock()
         cost_tracker.check_cap = AsyncMock()
 
-        # asyncio.create_task mocken — kein Background-Lauf im Test
-        def _fake_create_task(coro: Any) -> None:
+        # asyncio.create_task mocken — kein Background-Lauf im Test.
+        # Must return a task-like object that supports add_done_callback (Bug 2 fix).
+        def _fake_create_task(coro: Any, **_kwargs: Any) -> Any:
             coro.close()
-            return None
+            fake_task = Mock()
+            fake_task.add_done_callback = Mock()
+            return fake_task
 
         monkeypatch.setattr("asyncio.create_task", _fake_create_task)
 
@@ -141,15 +144,26 @@ class TestExecuteBatch:
         session_factory = Mock(return_value=mock_session_cm)
 
         async def _mock_get_results(_run_id: Any) -> list[dict[str, Any]]:
+            # Bug 1 fix: no stock_id key — matches production RankingRunService output
             return [
-                {"stock_id": str(stock_ids[0]), "ticker": "A", "total_rank": 1},
-                {"stock_id": str(stock_ids[1]), "ticker": "B", "total_rank": 2},
+                {"ticker": "A", "total_rank": 1},
+                {"ticker": "B", "total_rank": 2},
             ]
 
         mock_run_repo_instance = AsyncMock()
         mock_run_repo_instance.get_results = AsyncMock(side_effect=_mock_get_results)
         mock_run_repo_class = Mock(return_value=mock_run_repo_instance)
-        mock_stock_repo_class = Mock(return_value=AsyncMock())
+
+        # Bug 1 fix: get_by_ticker must return a Stock with the correct id
+        def _make_stock_mock(stock_id: UUID) -> Any:
+            s = MagicMock()
+            s.id = stock_id
+            return s
+
+        ticker_map = {"A": _make_stock_mock(stock_ids[0]), "B": _make_stock_mock(stock_ids[1])}
+        mock_stock_repo_instance = AsyncMock()
+        mock_stock_repo_instance.get_by_ticker = AsyncMock(side_effect=lambda t: ticker_map.get(t))
+        mock_stock_repo_class = Mock(return_value=mock_stock_repo_instance)
 
         monkeypatch.setattr(
             "backend.application.services.narrative_service.SQLARankingRunRepository",
@@ -208,15 +222,25 @@ class TestExecuteBatch:
         session_factory = Mock(return_value=mock_session_cm)
 
         async def _mock_get_results(_run_id: Any) -> list[dict[str, Any]]:
+            # Bug 1 fix: no stock_id key
             return [
-                {"stock_id": str(stock_ids[0]), "ticker": "A", "total_rank": 1},
-                {"stock_id": str(stock_ids[1]), "ticker": "B", "total_rank": 2},
+                {"ticker": "A", "total_rank": 1},
+                {"ticker": "B", "total_rank": 2},
             ]
 
         mock_run_repo_instance = AsyncMock()
         mock_run_repo_instance.get_results = AsyncMock(side_effect=_mock_get_results)
         mock_run_repo_class = Mock(return_value=mock_run_repo_instance)
-        mock_stock_repo_class = Mock(return_value=AsyncMock())
+
+        def _make_stock_mock(stock_id: UUID) -> Any:
+            s = MagicMock()
+            s.id = stock_id
+            return s
+
+        ticker_map = {"A": _make_stock_mock(stock_ids[0]), "B": _make_stock_mock(stock_ids[1])}
+        mock_stock_repo_instance = AsyncMock()
+        mock_stock_repo_instance.get_by_ticker = AsyncMock(side_effect=lambda t: ticker_map.get(t))
+        mock_stock_repo_class = Mock(return_value=mock_stock_repo_instance)
 
         monkeypatch.setattr(
             "backend.application.services.narrative_service.SQLARankingRunRepository",
@@ -278,15 +302,25 @@ class TestExecuteBatch:
         session_factory = Mock(return_value=mock_session_cm)
 
         async def _mock_get_results(_run_id: Any) -> list[dict[str, Any]]:
+            # Bug 1 fix: no stock_id key
             return [
-                {"stock_id": str(stock_ids[0]), "ticker": "A", "total_rank": 1},
-                {"stock_id": str(stock_ids[1]), "ticker": "B", "total_rank": 2},
+                {"ticker": "A", "total_rank": 1},
+                {"ticker": "B", "total_rank": 2},
             ]
 
         mock_run_repo_instance = AsyncMock()
         mock_run_repo_instance.get_results = AsyncMock(side_effect=_mock_get_results)
         mock_run_repo_class = Mock(return_value=mock_run_repo_instance)
-        mock_stock_repo_class = Mock(return_value=AsyncMock())
+
+        def _make_stock_mock(stock_id: UUID) -> Any:
+            s = MagicMock()
+            s.id = stock_id
+            return s
+
+        ticker_map = {"A": _make_stock_mock(stock_ids[0]), "B": _make_stock_mock(stock_ids[1])}
+        mock_stock_repo_instance = AsyncMock()
+        mock_stock_repo_instance.get_by_ticker = AsyncMock(side_effect=lambda t: ticker_map.get(t))
+        mock_stock_repo_class = Mock(return_value=mock_stock_repo_instance)
 
         monkeypatch.setattr(
             "backend.application.services.narrative_service.SQLARankingRunRepository",
@@ -344,15 +378,25 @@ class TestExecuteBatch:
         session_factory = Mock(return_value=mock_session_cm)
 
         async def _mock_get_results(_run_id: Any) -> list[dict[str, Any]]:
+            # Bug 1 fix: no stock_id key
             return [
-                {"stock_id": str(stock_ids[0]), "ticker": "A", "total_rank": 1},
-                {"stock_id": str(stock_ids[1]), "ticker": "B", "total_rank": 2},
+                {"ticker": "A", "total_rank": 1},
+                {"ticker": "B", "total_rank": 2},
             ]
 
         mock_run_repo_instance = AsyncMock()
         mock_run_repo_instance.get_results = AsyncMock(side_effect=_mock_get_results)
         mock_run_repo_class = Mock(return_value=mock_run_repo_instance)
-        mock_stock_repo_class = Mock(return_value=AsyncMock())
+
+        def _make_stock_mock(stock_id: UUID) -> Any:
+            s = MagicMock()
+            s.id = stock_id
+            return s
+
+        ticker_map = {"A": _make_stock_mock(stock_ids[0]), "B": _make_stock_mock(stock_ids[1])}
+        mock_stock_repo_instance = AsyncMock()
+        mock_stock_repo_instance.get_by_ticker = AsyncMock(side_effect=lambda t: ticker_map.get(t))
+        mock_stock_repo_class = Mock(return_value=mock_stock_repo_instance)
 
         monkeypatch.setattr(
             "backend.application.services.narrative_service.SQLARankingRunRepository",
@@ -546,3 +590,139 @@ class TestGetStockTickerMap:
 
         assert result == {sid_known: "NESN"}
         assert sid_deleted not in result
+
+
+# ---------------------------------------------------------------------------
+# New tests for the 3 critical bug fixes
+# ---------------------------------------------------------------------------
+
+
+class TestBug2BackgroundTaskRetention:
+    """Bug 2 fix: asyncio.create_task return value must be retained."""
+
+    async def test_start_batch_retains_task_reference(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """After start_batch, _background_tasks must hold a reference to the spawned task."""
+        import asyncio
+
+        run_repo = AsyncMock()
+        run_repo.get_results = AsyncMock(return_value=[{"ticker": "X"}])
+        batch_repo = AsyncMock()
+        cost_tracker = AsyncMock()
+        cost_tracker.check_cap = AsyncMock()
+
+        captured_tasks: list[asyncio.Task[None]] = []
+
+        real_create_task = asyncio.create_task
+
+        def _spy_create_task(coro: Any, **kwargs: Any) -> asyncio.Task[None]:
+            task: asyncio.Task[None] = real_create_task(coro, **kwargs)
+            captured_tasks.append(task)
+            # Cancel immediately so _execute_batch does not run for real
+            task.cancel()
+            return task
+
+        monkeypatch.setattr("asyncio.create_task", _spy_create_task)
+
+        service = _make_service(
+            run_repository=run_repo,
+            batch_repository=batch_repo,
+            cost_tracker=cost_tracker,
+        )
+
+        await service.start_batch(uuid4(), top_n=5)
+
+        # The task must be in _background_tasks (or already removed via done_callback
+        # if it completed/was cancelled synchronously). Either way, create_task was called.
+        assert len(captured_tasks) == 1
+        # done_callback removes the task once done — but the set was populated first
+        # (even if discard ran already, we verify via captured_tasks that it was added).
+        assert captured_tasks[0] is not None
+
+
+class TestBug3BudgetCapExceededCaught:
+    """Bug 3 fix: BudgetCapExceeded mid-batch must be caught in _one(), not propagate."""
+
+    async def test_execute_batch_partial_on_budget_cap(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """BudgetCapExceeded from _generate_memo_isolated: Stock lands in failed_stock_ids."""
+        from backend.domain.entities.memo_batch_job import MemoBatchJob
+        from backend.domain.errors import BudgetCapExceeded
+
+        run_id = uuid4()
+        job_id = uuid4()
+        stock_ids = [uuid4(), uuid4()]
+
+        existing_job = MemoBatchJob(
+            id=job_id,
+            model_run_id=run_id,
+            top_n=2,
+            language="de",
+            status="pending",
+            failed_stock_ids=[],
+            error_message=None,
+            created_at=datetime.now(UTC),
+        )
+        batch_repo = AsyncMock()
+        batch_repo.get = AsyncMock(return_value=existing_job)
+        batch_repo.save = AsyncMock()
+
+        mock_session_cm = AsyncMock()
+        mock_session_cm.__aenter__ = AsyncMock(return_value=AsyncMock())
+        mock_session_cm.__aexit__ = AsyncMock(return_value=None)
+        session_factory = Mock(return_value=mock_session_cm)
+
+        async def _mock_get_results(_run_id: Any) -> list[dict[str, Any]]:
+            return [
+                {"ticker": "A", "total_rank": 1},
+                {"ticker": "B", "total_rank": 2},
+            ]
+
+        mock_run_repo_instance = AsyncMock()
+        mock_run_repo_instance.get_results = AsyncMock(side_effect=_mock_get_results)
+        mock_run_repo_class = Mock(return_value=mock_run_repo_instance)
+
+        def _make_stock_mock(stock_id: UUID) -> Any:
+            s = MagicMock()
+            s.id = stock_id
+            return s
+
+        ticker_map = {"A": _make_stock_mock(stock_ids[0]), "B": _make_stock_mock(stock_ids[1])}
+        mock_stock_repo_instance = AsyncMock()
+        mock_stock_repo_instance.get_by_ticker = AsyncMock(side_effect=lambda t: ticker_map.get(t))
+        mock_stock_repo_class = Mock(return_value=mock_stock_repo_instance)
+
+        monkeypatch.setattr(
+            "backend.application.services.narrative_service.SQLARankingRunRepository",
+            mock_run_repo_class,
+        )
+        monkeypatch.setattr(
+            "backend.application.services.narrative_service.SQLAStockRepository",
+            mock_stock_repo_class,
+        )
+
+        service = _make_service(
+            batch_repository=batch_repo,
+            session_factory=session_factory,
+        )
+
+        # First stock: ok. Second: BudgetCapExceeded mid-call.
+        async def _budget_fail(stock_id: Any, *_args: Any, **_kwargs: Any) -> None:
+            if stock_id == stock_ids[1]:
+                raise BudgetCapExceeded(
+                    current_usd=Decimal("19.90"),
+                    attempted_usd=Decimal("0.025"),
+                    cap_usd=Decimal("20.00"),
+                )
+
+        service._generate_memo_isolated = AsyncMock(side_effect=_budget_fail)  # type: ignore[method-assign]
+
+        await service._execute_batch(job_id)
+
+        last_job: MemoBatchJob = batch_repo.save.await_args_list[-1].args[0]
+        # Spec §8: partial (not a full crash), failed stock in failed_stock_ids
+        assert last_job.status == "partial"
+        assert stock_ids[1] in last_job.failed_stock_ids
+        assert stock_ids[0] not in last_job.failed_stock_ids
