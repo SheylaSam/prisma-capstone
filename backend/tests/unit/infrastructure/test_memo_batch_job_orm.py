@@ -43,6 +43,12 @@ def test_id_is_primary_key() -> None:
     assert pk_cols == {"id"}
 
 
+def test_index_on_model_run_id() -> None:
+    indexes = MemoBatchJobORM.__table__.indexes  # type: ignore[attr-defined]
+    index_names = {idx.name for idx in indexes}
+    assert "ix_memo_batch_jobs_model_run_id" in index_names
+
+
 def test_check_constraints_named_without_doubling() -> None:
     """Naming-Convention prefix soll Constraint-Namen NICHT verdoppeln
     (Lehre aus PR #54 Foundation Build-Step 5)."""
