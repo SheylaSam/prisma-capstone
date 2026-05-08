@@ -4,7 +4,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Literal
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
@@ -121,7 +121,7 @@ def _sample_memo(
     run_id: Any = None,
     *,
     one_liner: str = "Kurzfassung des Memos.",
-    confidence: str = "high",
+    confidence: Literal["low", "medium", "high"] = "high",
     model_version: str = "claude-sonnet-4-6",
 ) -> ResearchMemo:
     return ResearchMemo(
