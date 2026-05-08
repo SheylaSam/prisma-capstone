@@ -1,0 +1,122 @@
+"""Integration-Tests fuer /api/v1/memos/batch + /api/v1/memos/jobs/{id}.
+
+Spec: docs/specs/2026-05-08-narrative-engine-multi-memo-batch.md §6.
+Alle Tests nutzen dependency_overrides — kein DB-Zugriff, kein LLM-Call.
+"""
+
+from datetime import UTC, datetime
+from decimal import Decimal
+from typing import Any
+from unittest.mock import AsyncMock
+from uuid import UUID, uuid4
+
+import pytest
+import pytest_asyncio
+from fastapi.testclient import TestClient
+
+from backend.application.services.narrative_service import NarrativeService
+from backend.domain.entities.memo_batch_job import MemoBatchJob
+from backend.domain.errors import BudgetCapExceeded
+from backend.interfaces.rest.app import create_app
+from backend.interfaces.rest.dependencies import get_narrative_service
+
+pytestmark = pytest.mark.integration
+
+
+def _make_pending_job(run_id: UUID | None = None) -> MemoBatchJob:
+    return MemoBatchJob(
+        id=uuid4(),
+        model_run_id=run_id or uuid4(),
+        top_n=20,
+        language="de",
+        status="pending",
+        failed_stock_ids=[],
+        error_message=None,
+        created_at=datetime.now(UTC),
+    )
+
+
+@pytest_asyncio.fixture
+async def app_with_mock_service() -> Any:
+    app = create_app()
+    mock_service = AsyncMock(spec=NarrativeService)
+    app.dependency_overrides[get_narrative_service] = lambda: mock_service
+    yield app, mock_service
+    app.dependency_overrides.clear()
+
+
+def test_post_batch_returns_202(app_with_mock_service: Any) -> None:
+    app, service = app_with_mock_service
+    job = _make_pending_job()
+    service.start_batch = AsyncMock(return_value=job)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/v1/memos/batch",
+            json={"model_run_id": str(job.model_run_id), "top_n": 20},
+        )
+
+    assert resp.status_code == 202
+    body = resp.json()
+    assert body["status"] == "pending"
+    assert UUID(body["job_id"]) == job.id
+
+
+def test_post_batch_returns_404_run_missing(app_with_mock_service: Any) -> None:
+    app, service = app_with_mock_service
+    service.start_batch = AsyncMock(side_effect=LookupError("Run x not found"))
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/v1/memos/batch",
+            json={"model_run_id": str(uuid4()), "top_n": 20},
+        )
+
+    assert resp.status_code == 404
+
+
+def test_post_batch_returns_402_budget_exceeded(app_with_mock_service: Any) -> None:
+    app, service = app_with_mock_service
+    service.start_batch = AsyncMock(
+        side_effect=BudgetCapExceeded(
+            current_usd=Decimal("19.00"),
+            attempted_usd=Decimal("0.50"),
+            cap_usd=Decimal("20.00"),
+        )
+    )
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/v1/memos/batch",
+            json={"model_run_id": str(uuid4()), "top_n": 20},
+        )
+
+    assert resp.status_code == 402
+
+
+def test_get_job_returns_404_unknown(app_with_mock_service: Any) -> None:
+    app, service = app_with_mock_service
+    service.get_batch_job = AsyncMock(return_value=None)
+
+    with TestClient(app) as client:
+        resp = client.get(f"/api/v1/memos/jobs/{uuid4()}")
+
+    assert resp.status_code == 404
+
+
+def test_get_job_returns_status_and_progress(app_with_mock_service: Any) -> None:
+    app, service = app_with_mock_service
+    job = _make_pending_job()
+    job_running = job.model_copy(update={"status": "running", "started_at": datetime.now(UTC)})
+    service.get_batch_job = AsyncMock(return_value=job_running)
+    service.list_memos_for_run = AsyncMock(return_value=[])
+
+    with TestClient(app) as client:
+        resp = client.get(f"/api/v1/memos/jobs/{job.id}")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "running"
+    assert body["progress"]["expected"] == 20
+    assert body["progress"]["completed"] == 0
+    assert body["progress"]["failed"] == 0
