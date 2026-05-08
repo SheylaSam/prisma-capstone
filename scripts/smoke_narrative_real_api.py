@@ -64,9 +64,7 @@ CACHE_READ_PER_MTOK = INPUT_PER_MTOK * Decimal("0.10")
 ONE_MILLION = Decimal("1_000_000")
 
 
-async def _make_call(
-    llm: LLMClient, system_prompt: str, user_prompt: str
-) -> tuple[Any, float]:
+async def _make_call(llm: LLMClient, system_prompt: str, user_prompt: str) -> tuple[Any, float]:
     start = time.perf_counter()
     response = await llm.messages_create(
         model=MODEL,
@@ -105,12 +103,8 @@ def _usage_dict(response: Any) -> dict[str, int]:
 def _cost_usd(usage: dict[str, int]) -> Decimal:
     in_cost = Decimal(usage["input_tokens"]) * INPUT_PER_MTOK / ONE_MILLION
     out_cost = Decimal(usage["output_tokens"]) * OUTPUT_PER_MTOK / ONE_MILLION
-    cw_cost = (
-        Decimal(usage["cache_creation_input_tokens"]) * CACHE_WRITE_PER_MTOK / ONE_MILLION
-    )
-    cr_cost = (
-        Decimal(usage["cache_read_input_tokens"]) * CACHE_READ_PER_MTOK / ONE_MILLION
-    )
+    cw_cost = Decimal(usage["cache_creation_input_tokens"]) * CACHE_WRITE_PER_MTOK / ONE_MILLION
+    cr_cost = Decimal(usage["cache_read_input_tokens"]) * CACHE_READ_PER_MTOK / ONE_MILLION
     return in_cost + out_cost + cw_cost + cr_cost
 
 
@@ -133,12 +127,8 @@ async def main() -> None:
     print("PRISMA Narrative-Engine — Real-API-Smoke (PR #64 W5)")
     print("=" * 64)
     print(f"Model: {MODEL}")
-    print(
-        f"System-Prompt: {len(system_prompt)} chars (~{len(system_prompt) // 3} tokens estimate)"
-    )
-    print(
-        f"User-Prompt:   {len(user_prompt)} chars (~{len(user_prompt) // 3} tokens estimate)"
-    )
+    print(f"System-Prompt: {len(system_prompt)} chars (~{len(system_prompt) // 3} tokens estimate)")
+    print(f"User-Prompt:   {len(user_prompt)} chars (~{len(user_prompt) // 3} tokens estimate)")
     print()
 
     print("Call 1 (cache creation expected) ...")

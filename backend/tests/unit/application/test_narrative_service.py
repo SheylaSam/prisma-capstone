@@ -233,9 +233,7 @@ async def test_generate_memo_happy_path() -> None:
     stock_id, run_id = uuid4(), uuid4()
 
     # Persisted memo (was die DB nach save() haelt — das was der Service zurueckgibt)
-    persisted = _sample_memo(
-        stock_id=stock_id, run_id=run_id, one_liner="Defensiver Quality-Kern."
-    )
+    persisted = _sample_memo(stock_id=stock_id, run_id=run_id, one_liner="Defensiver Quality-Kern.")
 
     memo_repo = AsyncMock()
     # 1. Call: Cache-Check → None. 2. Call: Reload nach save() → persisted.
@@ -312,9 +310,7 @@ async def test_generate_memo_force_regenerate_returns_persisted_not_inmemory() -
 
     # Persisted Memo: simuliert die DB-Row mit *originalem* id + created_at
     # (anders als das was der Service intern via uuid4()/datetime.now() generiert).
-    persisted = _sample_memo(
-        stock_id=stock_id, run_id=run_id, one_liner="Defensiver Quality-Kern."
-    )
+    persisted = _sample_memo(stock_id=stock_id, run_id=run_id, one_liner="Defensiver Quality-Kern.")
 
     memo_repo = AsyncMock()
     # force_regenerate=True ueberspringt den Cache-Check → get() wird nur
