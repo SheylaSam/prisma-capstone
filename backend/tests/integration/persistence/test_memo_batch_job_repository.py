@@ -74,9 +74,8 @@ class TestRoundtripAndUpsert:
         loaded = await repo.get(job.id)
 
         assert loaded is not None
-        assert loaded.id == job.id
-        assert loaded.status == "pending"
-        assert loaded.top_n == 20
+        # Full entity equality — catches _orm_to_entity mapping drift on ALL fields
+        assert loaded == job
 
     async def test_get_unknown_returns_none(
         self,
@@ -126,3 +125,5 @@ class TestRoundtripAndUpsert:
         loaded = await repo.get(job.id)
         assert loaded is not None
         assert loaded.failed_stock_ids == stock_ids
+        # Full entity equality — verifies the complete roundtrip, not just failed_stock_ids
+        assert loaded == job
