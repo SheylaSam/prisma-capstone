@@ -237,6 +237,9 @@ class NarrativeService:
         die laengst geschlossen ist). Stattdessen baut er pro parallelem
         Sub-Task eigene Sessions via session_factory (B1-Lehre).
         """
+        # _batch_repo is SQLAMemoBatchJobRepository which opens its own session per
+        # call — safe to use from background worker (unlike stock/run repos which
+        # would share the closed request session).
         job = await self._batch_repo.get(job_id)
         if job is None:
             return  # Sollte nicht passieren — job war grade erstellt
@@ -293,6 +296,7 @@ class NarrativeService:
                 except (
                     anthropic.APITimeoutError,
                     anthropic.APIConnectionError,
+                    anthropic.RateLimitError,
                 ) as exc:
                     self._logger.warning(
                         "Batch %s memo failed for stock %s: %s",
