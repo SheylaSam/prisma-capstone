@@ -155,13 +155,24 @@ class TestListByRun:
     async def test_list_by_run_returns_memos(
         self,
         seed_stock_and_run: tuple[uuid.UUID, uuid.UUID],
+        db_session: AsyncSession,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
-        stock_id, run_id = seed_stock_and_run
+        _, run_id = seed_stock_and_run
         repo = SQLAResearchMemoRepository(session_factory)
 
-        # 3 memos with different stock UUIDs to avoid UNIQUE constraint on (stock_id, run_id, lang)
-        memos = [_new_memo(uuid.uuid4(), run_id, language="de") for _ in range(3)]
+        # Seed 3 stocks (FK target for memos) to avoid FK-Violation on research_memos.stock_id
+        stock_ids = [uuid.uuid4() for _ in range(3)]
+        for i, sid in enumerate(stock_ids):
+            await db_session.execute(
+                text(
+                    "INSERT INTO stocks (id, ticker, name, currency) VALUES (:id, :t, :name, 'CHF')"
+                ),
+                {"id": sid, "t": f"TST{i}", "name": f"Test Stock {i}"},
+            )
+        await db_session.commit()
+
+        memos = [_new_memo(sid, run_id, language="de") for sid in stock_ids]
         for m in memos:
             await repo.save(m)
 
