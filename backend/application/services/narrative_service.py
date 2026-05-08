@@ -23,6 +23,7 @@ from statistics import median
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
+import anthropic
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +38,12 @@ from backend.domain.repositories.stock_repository import StockRepository
 from backend.domain.schemas.research_memo_schema import ResearchMemoSchema
 from backend.infrastructure.llm.client import LLMClient
 from backend.infrastructure.llm.prompts.prompt_loader import PromptTemplateLoader
+from backend.infrastructure.persistence.repositories.ranking_run_repository import (
+    SQLARankingRunRepository,
+)
+from backend.infrastructure.persistence.repositories.stock_repository import (
+    SQLAStockRepository,
+)
 
 
 class UniverseContext(BaseModel):
@@ -223,9 +230,105 @@ class NarrativeService:
         return job
 
     async def _execute_batch(self, job_id: UUID) -> None:
-        """Placeholder — wird in Task 8 implementiert."""
-        # TODO Task 8: load job, run batch, update status
-        pass
+        """Background-Worker. Wird via asyncio.create_task gestartet.
+
+        WICHTIG: Der Worker nutzt KEINE Service-eigenen Stock/Run-Repos
+        (die sind an die Request-Session des start_batch-Aufrufers gebunden,
+        die laengst geschlossen ist). Stattdessen baut er pro parallelem
+        Sub-Task eigene Sessions via session_factory (B1-Lehre).
+        """
+        job = await self._batch_repo.get(job_id)
+        if job is None:
+            return  # Sollte nicht passieren — job war grade erstellt
+
+        # Status auf running setzen
+        running = job.model_copy(update={"status": "running", "started_at": datetime.now(tz=UTC)})
+        await self._batch_repo.save(running)
+
+        # Top-N stocks aus Run-Results bestimmen (eine eigene Session fuer den Lookup)
+        async with self._session_factory() as session:
+            run_repo_init = SQLARankingRunRepository(session=session)
+            results = await run_repo_init.get_results(running.model_run_id)
+
+        if results is None:
+            # Sollte nicht passieren (start_batch hat schon validiert), aber defensiv
+            failed = running.model_copy(
+                update={
+                    "status": "failed",
+                    "completed_at": datetime.now(tz=UTC),
+                    "error_message": "Run results disappeared mid-batch",
+                }
+            )
+            await self._batch_repo.save(failed)
+            return
+
+        # Sort by total_rank ASC, take top_n stock_ids
+        sorted_results = sorted(results, key=lambda r: int(r["total_rank"]))
+        top_stocks = sorted_results[: running.top_n]
+        stock_ids: list[UUID] = [UUID(str(r["stock_id"])) for r in top_stocks]
+
+        self._logger.info(
+            "Batch %s running: %d stocks",
+            job_id,
+            len(stock_ids),
+        )
+
+        # Concurrency-Limit
+        semaphore = asyncio.Semaphore(self._max_concurrent_batch_workers)
+
+        async def _one(stock_id: UUID) -> tuple[str, UUID]:
+            async with semaphore, self._session_factory() as worker_session:
+                # Eigene Session pro Worker (B1-Lehre)
+                isolated_stock_repo = SQLAStockRepository(session=worker_session)
+                isolated_run_repo = SQLARankingRunRepository(session=worker_session)
+                try:
+                    await self._generate_memo_isolated(
+                        stock_id,
+                        running.model_run_id,
+                        language=running.language,
+                        stock_repo=isolated_stock_repo,
+                        run_repo=isolated_run_repo,
+                    )
+                    return ("ok", stock_id)
+                except (
+                    anthropic.APITimeoutError,
+                    anthropic.APIConnectionError,
+                ) as exc:
+                    self._logger.warning(
+                        "Batch %s memo failed for stock %s: %s",
+                        job_id,
+                        stock_id,
+                        exc,
+                    )
+                    return ("failed", stock_id)
+
+        results_per_stock = await asyncio.gather(*[_one(s) for s in stock_ids])
+        failed_ids = [s for status, s in results_per_stock if status == "failed"]
+
+        n_failed = len(failed_ids)
+        if n_failed == 0:
+            final_status: str = "complete"
+        elif n_failed == len(stock_ids):
+            final_status = "failed"
+        else:
+            final_status = "partial"
+
+        self._logger.info(
+            "Batch %s %s: %d ok, %d failed",
+            job_id,
+            final_status,
+            len(stock_ids) - n_failed,
+            n_failed,
+        )
+
+        final = running.model_copy(
+            update={
+                "status": final_status,
+                "failed_stock_ids": failed_ids,
+                "completed_at": datetime.now(tz=UTC),
+            }
+        )
+        await self._batch_repo.save(final)
 
     async def _generate_memo_isolated(
         self,
