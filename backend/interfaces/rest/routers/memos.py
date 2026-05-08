@@ -163,7 +163,7 @@ async def get_job(
     memo_summaries = [
         BatchMemoSummary(
             stock_id=m.stock_id,
-            ticker="",  # Placeholder — Stock-Ticker-Lookup folgt in Task 11
+            ticker=None,  # populated in Task 11 with stock-lookup
             one_liner=m.one_liner,
             is_error=(m.model_version == "error-fallback"),
         )
