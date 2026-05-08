@@ -357,6 +357,18 @@ Implementation dieser Slice ist komplett, wenn:
 | §11 — `/admin/llm-usage` | nicht im Slice | Existierender `CostTracker` reicht |
 | §13 Q1, Q2, Q4, Q5, Q6 | nicht entschieden | Q1/Q4 N/A in Slice (kein Batch); Q2/Q5/Q6 für Folge-PR |
 
+### 11.1 Plan-Code-Drift (nach PR #64 Review von itsFabia)
+
+Drei Stellen, an denen die Implementierung von der Slice-Spec abwich und im Review-Fix-Bundle korrigiert wurden:
+
+| Spec-Forderung | Drift im Plan/Code | Fix-Commit |
+|---|---|---|
+| §4 — sequenzielle Daten-Loads (`stock` dann `results`) | `asyncio.gather` mit geteilter `AsyncSession` (Concurrency-Bug) | B1 — `feat/narrative-single-memo` |
+| §2 + §5 — Slice ist DE-only, EN-Template ist Stub | Service akzeptierte `language="en"` ohne Guard → Anthropic-Call mit 1-Wort-Prompt → Token-Verbrauch | B2 — Service raised `NotImplementedError` |
+| §5 — `generate_memo` returnt persistierten Memo (mit DB-vergebener `id`/`created_at`) | Service returnte in-memory Entity mit frischer `uuid4()` → Drift gegenüber DB-Row bei `force_regenerate=True` | B3 — Reload via `memo_repo.get()` nach `save()` |
+
+Lehre für Folge-PRs: Plan-Pseudo-Code muss vor Code-Generierung gegen DI-Wiring (geteilte Sessions) und Repository-Vertrag (UPSERT-Semantik) geprüft werden. Reality-Check (v1.0 → v1.1) erkannte fehlende Repo-Methoden, aber nicht die Concurrency-Implikation der Session-Teilung.
+
 ---
 
 ## 12. Änderungshistorie
@@ -365,3 +377,4 @@ Implementation dieser Slice ist komplett, wenn:
 |---|---|---|---|
 | Draft v1.0 | 2026-05-04 | Sheyla / Claude Code Opus 4.7 | Initiale Slice-Spec — schneidet Single-Memo-Pfad aus Parent-Spec heraus |
 | Draft v1.1 | 2026-05-04 | Sheyla / Claude Code Opus 4.7 | Realitäts-Korrektur vor Plan-Schreiben: Spec referenzierte nicht-existente Repo-Methoden (`stock_repo.get`, `ranking_repo.get_for_stock`, `ranking_repo.get_universe_context`). Korrigiert: `StockRepository.get` als kleine Erweiterung; ranking + universe context werden inline aus `RankingRunRepository.get_results()` abgeleitet (kein neuer Port). `UniverseContext` ist Service-internes Value-Object, nicht eigene Datei. |
+| Draft v1.2 | 2026-05-08 | Sheyla / Claude Code Opus 4.7 | §11.1 ergänzt: Plan-Code-Drift-Tabelle für die drei Blocker aus PR #64 Review (B1 asyncio.gather, B2 EN-Template-Guard, B3 ID-Reload). Spec selbst unverändert — die Drift war Plan→Code, nicht Spec→Plan. |
