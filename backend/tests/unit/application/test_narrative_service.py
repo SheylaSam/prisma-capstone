@@ -348,6 +348,30 @@ async def test_generate_memo_404_when_stock_not_in_run() -> None:
         await service.generate_memo(uuid4(), uuid4())
 
 
+async def test_generate_memo_raises_not_implemented_for_en_language() -> None:
+    """B2 (PR #64 review): EN-Template ist Stub. Service muss frueh failen,
+    bevor DB-Read oder LLM-Call passieren — sonst landet
+    'TODO_EN_TEMPLATE_NOT_IMPLEMENTED' bei Anthropic und kostet Tokens.
+    """
+    memo_repo = AsyncMock()
+    llm = AsyncMock()
+
+    service = NarrativeService(
+        memo_repository=memo_repo,
+        run_repository=AsyncMock(),
+        stock_repository=AsyncMock(),
+        llm_client=llm,
+        prompt_loader=AsyncMock(),
+    )
+
+    with pytest.raises(NotImplementedError, match="en"):
+        await service.generate_memo(uuid4(), uuid4(), language="en")
+
+    # Guard greift *vor* allen Side-Effects.
+    memo_repo.get.assert_not_awaited()
+    llm.messages_create.assert_not_awaited()
+
+
 # ---------------------------------------------------------------------------
 # Task 8 — NarrativeService.generate_memo — Error-Pfade
 # ---------------------------------------------------------------------------
