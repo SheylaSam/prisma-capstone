@@ -31,6 +31,7 @@ from backend.application.services.cost_tracker import CostTracker
 from backend.domain.entities.memo_batch_job import MemoBatchJob
 from backend.domain.entities.research_memo import ResearchMemo
 from backend.domain.entities.stock import Stock
+from backend.domain.errors import BudgetCapExceeded
 from backend.domain.repositories.memo_batch_job_repository import MemoBatchJobRepository
 from backend.domain.repositories.ranking_run_repository import RankingRunRepository
 from backend.domain.repositories.research_memo_repository import ResearchMemoRepository
@@ -156,6 +157,9 @@ class NarrativeService:
         self._max_concurrent_batch_workers = max_concurrent_batch_workers
         self._stale_batch_timeout_seconds = stale_batch_timeout_seconds
         self._logger = logging.getLogger("backend.narrative_service")
+        # Bug 2 fix: retain strong references so GC cannot cancel mid-execution tasks.
+        # Python asyncio docs: "Save a reference to the result of create_task()."
+        self._background_tasks: set[asyncio.Task[None]] = set()
 
     async def get_memo(
         self,
@@ -223,9 +227,11 @@ class NarrativeService:
         )
         await self._batch_repo.save(job)
 
-        # Background-Task spawnen (fire-and-forget)
-        # _execute_batch wird in Task 8 implementiert; placeholder hier
-        asyncio.create_task(self._execute_batch(job.id))
+        # Background-Task spawnen — strong reference retained to prevent GC cancellation.
+        # Python asyncio docs: "Save a reference to the result of create_task()."
+        task = asyncio.create_task(self._execute_batch(job.id))
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
 
         return job
 
@@ -265,10 +271,26 @@ class NarrativeService:
             await self._batch_repo.save(failed)
             return
 
-        # Sort by total_rank ASC, take top_n stock_ids
+        # Sort by total_rank ASC, take top_n entries.
+        # Bug 1 fix: RankingRunService stores ticker/total_rank/etc. — no stock_id.
+        # Resolve each ticker to its stock_id via get_by_ticker using a dedicated session.
         sorted_results = sorted(results, key=lambda r: int(r["total_rank"]))
         top_stocks = sorted_results[: running.top_n]
-        stock_ids: list[UUID] = [UUID(str(r["stock_id"])) for r in top_stocks]
+
+        stock_ids: list[UUID] = []
+        for row in top_stocks:
+            ticker = row["ticker"]
+            async with self._session_factory() as lookup_session:
+                lookup_stock_repo = SQLAStockRepository(session=lookup_session)
+                stock = await lookup_stock_repo.get_by_ticker(ticker)
+            if stock is None:
+                self._logger.warning(
+                    "Batch %s: ticker %s not found in DB, skipping",
+                    job_id,
+                    ticker,
+                )
+                continue
+            stock_ids.append(stock.id)
 
         self._logger.info(
             "Batch %s running: %d stocks",
@@ -297,6 +319,7 @@ class NarrativeService:
                     anthropic.APITimeoutError,
                     anthropic.APIConnectionError,
                     anthropic.RateLimitError,
+                    BudgetCapExceeded,
                 ) as exc:
                     self._logger.warning(
                         "Batch %s memo failed for stock %s: %s",
