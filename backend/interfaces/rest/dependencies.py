@@ -11,6 +11,7 @@ from backend.application.services.ranking_run_service import RankingRunService
 from backend.application.services.stock_service import StockService
 from backend.config import Settings, get_settings
 from backend.domain.ports.fundamentals_provider import FundamentalsProvider
+from backend.domain.ports.market_data_provider import MarketDataProvider
 from backend.domain.repositories.cost_log_repository import CostLogRepository
 from backend.domain.repositories.ranking_run_repository import RankingRunRepository
 from backend.domain.repositories.stock_repository import StockRepository
@@ -32,6 +33,7 @@ from backend.infrastructure.persistence.session import (
     get_session_factory,
 )
 from backend.infrastructure.providers.stub_fundamentals import StubFundamentalsProvider
+from backend.infrastructure.providers.stub_market_data import StubMarketDataProvider
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -93,15 +95,21 @@ async def get_fundamentals_provider() -> FundamentalsProvider:
     return StubFundamentalsProvider()
 
 
+async def get_market_data_provider() -> MarketDataProvider:
+    return StubMarketDataProvider()
+
+
 async def get_ranking_run_service(
     universe_repo: UniverseRepository = Depends(get_universe_repository),
     run_repo: RankingRunRepository = Depends(get_ranking_run_repository),
     fundamentals_provider: FundamentalsProvider = Depends(get_fundamentals_provider),
+    market_data_provider: MarketDataProvider = Depends(get_market_data_provider),
 ) -> RankingRunService:
     return RankingRunService(
         universe_repo=universe_repo,
         run_repo=run_repo,
         fundamentals_provider=fundamentals_provider,
+        market_data_provider=market_data_provider,
     )
 
 

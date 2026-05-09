@@ -9,6 +9,7 @@ from backend.domain.entities.ranking_run import RankingRun
 from backend.domain.entities.universe import WeightConfig
 from backend.domain.models.quality_classic import QualityClassicModel
 from backend.domain.ports.fundamentals_provider import FundamentalsProvider
+from backend.domain.ports.market_data_provider import MarketDataProvider
 from backend.domain.repositories.ranking_run_repository import RankingRunRepository
 from backend.domain.repositories.universe_repository import UniverseRepository
 
@@ -31,10 +32,12 @@ class RankingRunService:
         universe_repo: UniverseRepository,
         run_repo: RankingRunRepository,
         fundamentals_provider: FundamentalsProvider,
+        market_data_provider: MarketDataProvider,
     ) -> None:
         self._universe_repo = universe_repo
         self._run_repo = run_repo
         self._fundamentals_provider = fundamentals_provider
+        self._market_data_provider = market_data_provider
 
     async def create_and_execute_run(
         self,
