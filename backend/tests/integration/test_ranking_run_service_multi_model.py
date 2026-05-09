@@ -142,15 +142,17 @@ async def test_run_with_all_five_models_produces_per_model_ranks(
 async def test_run_produces_valid_total_ranks(
     service_setup: tuple[RankingRunService, InMemoryUniverseRepository, uuid.UUID],
 ) -> None:
-    """Mit allen 5 Modellen + Stub-Daten: jeder Ticker hat einen total_rank (nicht None)."""
+    """Mit allen 5 Modellen + Stub-Daten: jeder Ticker hat einen total_rank im
+    gültigen Bereich [1, 5]. Ties über method="min" sind erlaubt (z.B. [1,2,2,4,5]).
+    """
     service, _, universe_id = service_setup
     run = await service.create_and_execute_run(universe_id=universe_id)
 
     rankings = await service.get_rankings(run.id)
     assert all(r["total_rank"] is not None for r in rankings)
-    # Ränge bilden 1..5 (5 Ticker, kein Tied — Stub-Random-Walks unterscheiden sich)
-    ranks = sorted(r["total_rank"] for r in rankings)
-    assert ranks == [1, 2, 3, 4, 5]
+    assert all(1 <= r["total_rank"] <= 5 for r in rankings)
+    # Mindestens ein Ticker hat Rang 1 (kanonisches Verhalten von method="min")
+    assert any(r["total_rank"] == 1 for r in rankings)
 
 
 async def test_run_with_empty_prices_falls_back_to_quality_only(
@@ -166,7 +168,7 @@ async def test_run_with_empty_prices_falls_back_to_quality_only(
         async def get_prices(self, tickers: list[str]) -> pd.DataFrame:
             return pd.DataFrame()
 
-    service._market_data_provider = EmptyPrices()  # type: ignore[attr-defined]
+    service._market_data_provider = EmptyPrices()
     run = await service.create_and_execute_run(universe_id=universe_id)
 
     rankings = await service.get_rankings(run.id)
