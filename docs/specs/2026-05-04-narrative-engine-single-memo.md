@@ -356,6 +356,7 @@ Implementation dieser Slice ist komplett, wenn:
 | §10.3 — Golden-Prompt-CI | nicht im Slice | Out-of-scope, Folge-PR |
 | §11 — `/admin/llm-usage` | nicht im Slice | Existierender `CostTracker` reicht |
 | §13 Q1, Q2, Q4, Q5, Q6 | nicht entschieden | Q1/Q4 N/A in Slice (kein Batch); Q2/Q5/Q6 für Folge-PR |
+| §5 / §8 Parent — Parameter `lang` | Code verwendet `language` (Service, Router, Entity, ORM, Repository) | `language` ist semantisch klarer und weniger kollisionsanfällig (`lang` kollidiert mit Python-`builtins`-Konvention sowie HTML-Attribut-Namen). Konsistent über alle Layer durchgezogen. Parent-Spec wird in Folge-Slice harmonisiert (Issue offen bei nächster Master-Spec-Revision). itsFabia W2 in PR #64. |
 
 ### 11.1 Plan-Code-Drift (nach PR #64 Review von itsFabia)
 
@@ -378,3 +379,4 @@ Lehre für Folge-PRs: Plan-Pseudo-Code muss vor Code-Generierung gegen DI-Wiring
 | Draft v1.0 | 2026-05-04 | Sheyla / Claude Code Opus 4.7 | Initiale Slice-Spec — schneidet Single-Memo-Pfad aus Parent-Spec heraus |
 | Draft v1.1 | 2026-05-04 | Sheyla / Claude Code Opus 4.7 | Realitäts-Korrektur vor Plan-Schreiben: Spec referenzierte nicht-existente Repo-Methoden (`stock_repo.get`, `ranking_repo.get_for_stock`, `ranking_repo.get_universe_context`). Korrigiert: `StockRepository.get` als kleine Erweiterung; ranking + universe context werden inline aus `RankingRunRepository.get_results()` abgeleitet (kein neuer Port). `UniverseContext` ist Service-internes Value-Object, nicht eigene Datei. |
 | Draft v1.2 | 2026-05-08 | Sheyla / Claude Code Opus 4.7 | §11.1 ergänzt: Plan-Code-Drift-Tabelle für die drei Blocker aus PR #64 Review (B1 asyncio.gather, B2 EN-Template-Guard, B3 ID-Reload). Spec selbst unverändert — die Drift war Plan→Code, nicht Spec→Plan. |
+| Draft v1.3 | 2026-05-10 | Sheyla / Claude Code Opus 4.7 | §11 ergänzt: bewusste Parameter-Umbenennung `lang` → `language` (itsFabia W2 in PR #64). Doku-Only — Code unverändert, Begründung nachgezogen. Parent-Spec-Harmonisierung in Folge-Slice. |
