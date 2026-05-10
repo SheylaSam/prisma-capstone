@@ -200,12 +200,6 @@ class NarrativeService:
         language: Literal["de", "en"] = "de",
     ) -> MemoBatchJob:
         """Validiert Run, erstellt Job, spawned Background-Task, returnt sofort."""
-        # EN-Guard
-        if language == "en":
-            raise NotImplementedError(
-                "EN-Memos sind in dieser Slice noch nicht implementiert. "
-                "Bitte language='de' nutzen."
-            )
         # top_n-Bounds
         if not (1 <= top_n <= 100):
             raise ValueError(f"top_n must be 1..100, got {top_n}")
@@ -526,15 +520,6 @@ class NarrativeService:
         (_execute_batch in Task 8) nutzt isolated Repos via session_factory
         pro Worker (B1-Lehre — geteilte AsyncSession ist nicht concurrent-safe).
         """
-        # Guard: EN-Template ist Stub (siehe narrative_system.en.md.j2).
-        # Frueher Bail-Out verhindert Token-Verbrauch fuer Garbage-Prompt.
-        # Wird entfernt sobald EN-Template gefuellt ist (Folge-PR).
-        if language == "en":
-            raise NotImplementedError(
-                "EN-Memos sind in dieser Slice noch nicht implementiert "
-                "(narrative_system.en.md.j2 ist Stub). Bitte language='de' nutzen."
-            )
-
         # 1. Cache check
         if not force_regenerate:
             existing = await self._memo_repo.get(stock_id, model_run_id, language=language)
