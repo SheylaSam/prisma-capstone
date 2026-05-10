@@ -119,9 +119,7 @@ class TestStartBatch:
         assert job.language == "de"
         batch_repo.save.assert_awaited_once()
 
-    async def test_start_batch_accepts_en_language(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_start_batch_accepts_en_language(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """EN-Slice: start_batch akzeptiert language='en' und erstellt Job mit
         language='en' im Status 'pending'. Ersetzt den alten Guard-Test, weil
         EN-Templates jetzt produktiv sind."""
