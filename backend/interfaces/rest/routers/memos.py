@@ -127,8 +127,7 @@ async def post_batch(
         )
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except NotImplementedError as exc:
-        raise HTTPException(status_code=501, detail=str(exc)) from exc
+    # NotImplementedError-501-Handler entfernt: EN-Template ist aktiv (Wave-2-Slice).
     # BudgetCapExceeded: NICHT lokal fangen — globaler Handler in
     # exception_handlers.py liefert 402 mit strukturiertem Body + Retry-After.
     # Konsistent ueber alle AI-Endpoints (PR #70 W2).
