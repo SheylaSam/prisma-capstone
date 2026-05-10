@@ -44,6 +44,24 @@ def test_render_user_prompt_de_matches_snapshot() -> None:
     assert rendered.rstrip() == expected
 
 
+def test_render_user_prompt_en_matches_snapshot() -> None:
+    """Drift-Detection fuer EN-User-Template. Identischer Context wie DE."""
+    loader = PromptTemplateLoader()
+    rendered = loader.render("narrative_user.en.md.j2", _SNAPSHOT_CONTEXT)
+
+    expected = (FIXTURES / "expected_user_prompt.en.md").read_text(encoding="utf-8").rstrip()
+    assert rendered.rstrip() == expected
+
+
+def test_render_en_system_template_succeeds() -> None:
+    """System-Template darf einfach gerendert werden (keine Slots — alles statisch)."""
+    loader = PromptTemplateLoader()
+    rendered = loader.render("narrative_system.en.md.j2", {})
+    assert "quantitative research analyst" in rendered
+    assert "submit_memo" in rendered
+    assert "Sweet Spot" in rendered
+
+
 def test_render_unknown_template_raises() -> None:
     loader = PromptTemplateLoader()
     with pytest.raises(TemplateNotFound):
