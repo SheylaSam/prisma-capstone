@@ -234,28 +234,20 @@ async def test_full_pipeline_en(
             session_factory=session_factory,
         )
 
-        memo = await service.generate_memo(
-            ids["stock_id"], ids["run_id"], language="en"
-        )
+        memo = await service.generate_memo(ids["stock_id"], ids["run_id"], language="en")
 
         assert memo.language == "en"
         assert memo.confidence == "high"
-        assert memo.one_liner == (
-            "Defensive quality core with low risk, weak reversion potential."
-        )
+        assert memo.one_liner == ("Defensive quality core with low risk, weak reversion potential.")
         assert memo.model_version == "claude-sonnet-4-6"
 
         # Cache-Hit: EN-Memo wird beim get_memo(language="en") zurueckgegeben
-        en_lookup = await service.get_memo(
-            ids["stock_id"], ids["run_id"], language="en"
-        )
+        en_lookup = await service.get_memo(ids["stock_id"], ids["run_id"], language="en")
         assert en_lookup is not None
         assert en_lookup.id == memo.id
 
         # Cache-Trennung: DE-Pfad ist leer (kein EN-Memo durch DE-Lookup)
-        de_lookup = await service.get_memo(
-            ids["stock_id"], ids["run_id"], language="de"
-        )
+        de_lookup = await service.get_memo(ids["stock_id"], ids["run_id"], language="de")
         assert de_lookup is None
 
 
