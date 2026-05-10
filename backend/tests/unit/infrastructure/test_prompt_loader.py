@@ -12,34 +12,35 @@ pytestmark = pytest.mark.unit
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "prompts"
 
 
-def test_render_user_prompt_matches_snapshot() -> None:
-    loader = PromptTemplateLoader()
-    rendered = loader.render(
-        "narrative_user.md.j2",
-        {
-            "ticker": "NESN",
-            "name": "Nestle SA",
-            "sector": "Consumer Staples",
-            "country": "CH",
-            "run_id": "550e8400-e29b-41d4-a716-446655440001",
-            "universe_name": "Swiss-Mid-Cap",
-            "n_stocks": 80,
-            "median_rank": 40,
-            "top20_threshold": 16,
-            "rankings": {
-                "Quality Classic": {"rank": 8, "score": 0.87},
-                "Alpha": {"rank": 12, "score": 0.74},
-                "Trend Momentum": {"rank": 25, "score": 0.62},
-                "Value Alpha Potential": {"rank": 60, "score": 0.31},
-                "Diversification": {"rank": 5, "score": 0.91},
-            },
-            "total_rank": 11,
-            "sweet_spot": True,
-            "weights": "equal-weighted (0.20 each)",
-        },
-    )
+_SNAPSHOT_CONTEXT = {
+    "ticker": "NESN",
+    "name": "Nestle SA",
+    "sector": "Consumer Staples",
+    "country": "CH",
+    "run_id": "550e8400-e29b-41d4-a716-446655440001",
+    "universe_name": "Swiss-Mid-Cap",
+    "n_stocks": 80,
+    "median_rank": 40,
+    "top20_threshold": 16,
+    "rankings": {
+        "Quality Classic": {"rank": 8, "score": 0.87},
+        "Alpha": {"rank": 12, "score": 0.74},
+        "Trend Momentum": {"rank": 25, "score": 0.62},
+        "Value Alpha Potential": {"rank": 60, "score": 0.31},
+        "Diversification": {"rank": 5, "score": 0.91},
+    },
+    "total_rank": 11,
+    "sweet_spot": True,
+    "weights": "equal-weighted (0.20 each)",
+}
 
-    expected = (FIXTURES / "expected_user_prompt.md").read_text(encoding="utf-8").rstrip()
+
+def test_render_user_prompt_de_matches_snapshot() -> None:
+    """Drift-Detection fuer DE-User-Template."""
+    loader = PromptTemplateLoader()
+    rendered = loader.render("narrative_user.de.md.j2", _SNAPSHOT_CONTEXT)
+
+    expected = (FIXTURES / "expected_user_prompt.de.md").read_text(encoding="utf-8").rstrip()
     assert rendered.rstrip() == expected
 
 

@@ -562,7 +562,7 @@ class NarrativeService:
         # 3. Prompts rendern
         system_prompt = self._prompts.render(f"narrative_system.{language}.md.j2", {})
         user_prompt = self._prompts.render(
-            "narrative_user.md.j2",
+            f"narrative_user.{language}.md.j2",
             {
                 "ticker": stock.ticker,
                 "name": stock.name,
