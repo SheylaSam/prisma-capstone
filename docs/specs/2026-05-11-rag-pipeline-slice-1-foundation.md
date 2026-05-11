@@ -173,7 +173,8 @@ class EmbeddingRepository(ABC):
 
     @abstractmethod
     async def save_chunks(self, chunks: list[EmbeddingChunk]) -> None:
-        """Batch-Upsert von Chunks. Idempotent auf (document_id, chunk_idx)."""
+        """Batch-UPSERT von Chunks. Re-Run mit gleichem (document_id, chunk_idx)
+        ueberschreibt content + embedding + metadata, wirft keinen Error."""
 
     @abstractmethod
     async def get_document_by_url(self, url: str) -> Document | None:
@@ -269,7 +270,7 @@ abbricht: Support-Ticket an support@render.com.
 - `test_save_and_get_document`: Roundtrip
 - `test_save_chunks_batch`: 100 Chunks in einem Call, ueberprueft count_chunks
 - `test_unique_url_constraint`: zweiter save_document mit gleicher URL wirft DuplicateUrl
-- `test_unique_doc_chunk_idx_constraint`: doppelter chunk_idx wirft IntegrityError
+- `test_upsert_on_duplicate_chunk_idx`: zweiter save_chunks mit gleichem (document_id, chunk_idx) ueberschreibt, wirft KEINEN Error
 - `test_cascade_delete_document_deletes_chunks`: ON DELETE CASCADE
 - `test_list_documents_filtered_by_ticker`
 - `test_list_documents_sorted_by_ingested_at_desc`
