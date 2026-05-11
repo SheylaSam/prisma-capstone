@@ -100,7 +100,7 @@ Create `backend/tests/unit/interfaces/rest/test_require_api_key.py`:
 """Tests fuer require_api_key — opt-in Auth-Dependency fuer MCP-Tool-Endpoints."""
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from backend.config import Settings
@@ -113,7 +113,7 @@ def _make_app(*, tool_api_key: str = "") -> FastAPI:
     app = FastAPI()
 
     @app.get("/protected")
-    async def protected(_auth: None = pytest.importorskip("fastapi").Depends(require_api_key)) -> dict:  # noqa: B008
+    async def protected(_auth: None = Depends(require_api_key)) -> dict:
         return {"ok": True}
 
     app.dependency_overrides[get_settings] = lambda: Settings(tool_api_key=tool_api_key)
@@ -240,28 +240,69 @@ Falls keine Tests existieren: bei der naechsten Suite-Run beobachten. Erwartung:
 
 - [ ] **Step 3.4: Add explicit test for opt-in-off behaviour**
 
-Existierende Test-Datei finden (oder neu in `backend/tests/integration/test_runs_router.py`) und ergaenzen:
+Bestehende Test-Datei `backend/tests/integration/test_runs_endpoint.py` nutzt
+`http_client`-Fixture-Pattern (httpx.AsyncClient + ASGITransport, KEIN
+sync TestClient). Wir folgen dem Pattern und ergaenzen Auth-Tests:
 
 ```python
+# Am Anfang der Datei zu den existing imports ergaenzen (falls nicht da)
+from backend.config import Settings
+from backend.interfaces.rest.dependencies import get_settings
+
+
+@pytest_asyncio.fixture
+async def http_client_with_tool_key() -> AsyncGenerator[AsyncClient, None]:
+    """Variant der http_client-Fixture mit tool_api_key gesetzt (Auth aktiv)."""
+    universe_repo = InMemoryUniverseRepository()
+    await universe_repo.save(_DEMO_UNIVERSE)
+    run_repo = InMemoryRankingRunRepository()
+    fundamentals_provider = StubFundamentalsProvider()
+
+    app = create_app()
+    app.dependency_overrides[get_universe_repository] = lambda: universe_repo
+    app.dependency_overrides[get_ranking_run_repository] = lambda: run_repo
+    app.dependency_overrides[get_fundamentals_provider] = lambda: fundamentals_provider
+    app.dependency_overrides[get_settings] = lambda: Settings(tool_api_key="t-secret")
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        yield client
+
+
 class TestPostRunsAuth:
-    def test_post_run_accepts_without_header_when_tool_key_unset(self, app_with_runs) -> None:
+    async def test_post_run_accepts_without_header_when_tool_key_unset(
+        self, http_client: AsyncClient
+    ) -> None:
         """Opt-in default-off: leerer tool_api_key → POST /runs ohne Header geht durch."""
-        app, _ = app_with_runs  # Adapter je nach Test-Fixture-Pattern
-        app.dependency_overrides[get_settings] = lambda: Settings(tool_api_key="")
-        with TestClient(app) as client:
-            response = client.post("/api/v1/runs", json={"universe_id": str(uuid4())})
-        # 404 (Universum existiert nicht im Test-Setup) — aber NICHT 401
+        response = await http_client.post(
+            "/api/v1/runs", json={"universe_id": str(_DEMO_UNIVERSE.id)}
+        )
+        # 201 (oder 200) erwartet — definitiv NICHT 401
         assert response.status_code != 401
 
-    def test_post_run_rejects_without_header_when_tool_key_set(self, app_with_runs) -> None:
-        app, _ = app_with_runs
-        app.dependency_overrides[get_settings] = lambda: Settings(tool_api_key="t")
-        with TestClient(app) as client:
-            response = client.post("/api/v1/runs", json={"universe_id": str(uuid4())})
+    async def test_post_run_rejects_without_header_when_tool_key_set(
+        self, http_client_with_tool_key: AsyncClient
+    ) -> None:
+        response = await http_client_with_tool_key.post(
+            "/api/v1/runs", json={"universe_id": str(_DEMO_UNIVERSE.id)}
+        )
         assert response.status_code == 401
+
+    async def test_post_run_accepts_correct_header_when_tool_key_set(
+        self, http_client_with_tool_key: AsyncClient
+    ) -> None:
+        response = await http_client_with_tool_key.post(
+            "/api/v1/runs",
+            json={"universe_id": str(_DEMO_UNIVERSE.id)},
+            headers={"X-API-Key": "t-secret"},
+        )
+        assert response.status_code != 401
 ```
 
-Falls die existing Test-Fixture-Conventions nicht zum Pattern passen: an die existierende `app_with_*`-Fixture-Pattern in `test_memo_batch_endpoint.py` orientieren.
+**Why this pattern, not TestClient:** Projekt-Konvention in
+`test_runs_endpoint.py` ist `httpx.AsyncClient + ASGITransport`. `_DEMO_UNIVERSE`,
+`InMemory*Repositories` und die Repo-Fixtures sind bereits in der Datei
+definiert — wir wiederverwenden sie.
 
 - [ ] **Step 3.5: Run tests**
 
@@ -814,6 +855,28 @@ class TestRunRankingTool:
         result = await run_ranking(client, universe_id=str(uuid4()))
         assert len(result["top_10_summary"]) == 1
         assert result["n_stocks"] == 1
+
+    async def test_sorts_rankings_when_backend_returns_unsorted(self) -> None:
+        """Backend garantiert keine Pre-Sortierung; total_rank ist Optional.
+        Tool sortiert: kleinster Rank zuerst, None ans Ende.
+        """
+        client = _make_client(
+            post_return={"id": str(uuid4()), "status": "succeeded",
+                          "universe_id": str(uuid4()), "created_at": "2026-05-11T10:00:00Z"},
+            get_return=[
+                {"ticker": "C", "total_rank": 3, "weighted_avg": 1.0,
+                 "is_sweet_spot": False, "per_model_ranks": {}},
+                {"ticker": "NULL", "total_rank": None, "weighted_avg": None,
+                 "is_sweet_spot": False, "per_model_ranks": {}},
+                {"ticker": "A", "total_rank": 1, "weighted_avg": 1.0,
+                 "is_sweet_spot": True, "per_model_ranks": {}},
+                {"ticker": "B", "total_rank": 2, "weighted_avg": 1.0,
+                 "is_sweet_spot": True, "per_model_ranks": {}},
+            ],
+        )
+        result = await run_ranking(client, universe_id=str(uuid4()))
+        tickers = [r["ticker"] for r in result["top_10_summary"]]
+        assert tickers == ["A", "B", "C", "NULL"]
 ```
 
 - [ ] **Step 6.3: Run tests to verify they fail**
@@ -881,13 +944,21 @@ async def run_ranking(
     run = await client.post("/api/v1/runs", json=payload)
     rankings = await client.get(f"/api/v1/runs/{run['id']}/rankings")
 
+    # Explizite Sortierung: total_rank ist `int | None` (schemas/runs.py:54),
+    # Backend garantiert keine Pre-Sortierung. Items mit total_rank=None
+    # landen ans Ende (sentinel = unendlich).
+    sorted_rankings = sorted(
+        rankings,
+        key=lambda r: (r["total_rank"] is None, r["total_rank"] or 0),
+    )
+
     top_10 = [
         {
             "ticker": r["ticker"],
             "total_rank": r["total_rank"],
             "sweet_spot": r["is_sweet_spot"],
         }
-        for r in rankings[:10]
+        for r in sorted_rankings[:10]
     ]
     return {
         "model_run_id": run["id"],
@@ -902,7 +973,7 @@ async def run_ranking(
 pytest backend/tests/unit/interfaces/mcp/tools/test_run_ranking.py -v
 ```
 
-Expected: 6/6 passed.
+Expected: 7/7 passed.
 
 - [ ] **Step 6.6: Commit**
 
@@ -1135,9 +1206,15 @@ def _fake_run(run_id, universe_id):  # type: ignore[no-untyped-def]
 
 
 def _fake_rank(rank: int) -> dict:
-    """Liefert ein RankingItem-Dict-Shape — get_rankings gibt typed objects,
-    aber RankingItem.model_validate(...) frisst sowohl dict als auch Objekt mit
-    den entsprechenden Attributen. Plan-Phase muss das verifizieren.
+    """Liefert ein RankingItem-Dict-Shape.
+
+    `RankingRunService.get_rankings` ist typed `list[dict[str, Any]]` und gibt
+    Dicts aus dem RankingRunRepository (`get_results`) zurueck. Der Router in
+    `routers/runs.py:54` ruft `RankingItem.model_validate(r)` auf den Dicts —
+    Pydantic erwartet hier Mapping-Keys, NICHT Objekt-Attribute (model_validate
+    mit Objekten braeuchte `from_attributes=True` config, was nicht gesetzt ist).
+
+    Daher: Mock returns dicts mit exakt den RankingItem-Field-Namen.
     """
     return {
         "ticker": f"T{rank:02d}",
@@ -1172,7 +1249,7 @@ git commit -m "test(mcp): Integration-Test fuer run_ranking E2E via FastAPI-Test
 **Files:**
 - Modify: `docs/AI-USAGE.md`
 
-- [ ] **Step 9.1: Full CI-Mirror lokal**
+- [ ] **Step 9.1: Full CI-Mirror lokal + Coverage**
 
 ```bash
 source .venv/bin/activate
@@ -1181,9 +1258,15 @@ ruff check backend/
 ruff format --check backend/
 pytest backend/tests/unit -q
 pytest backend/tests/integration/test_mcp_run_ranking.py -q
+
+# Coverage-Messung fuer die neue MCP-Schicht (Spec §9 Akzeptanz: >=85%)
+pytest backend/tests/unit/interfaces/mcp/ \
+    --cov=backend/interfaces/mcp \
+    --cov-report=term-missing \
+    --cov-fail-under=85
 ```
 
-Expected: alles gruen. Falls Failures: fix vor weiter.
+Expected: alles gruen, Coverage >= 85% auf `backend/interfaces/mcp/`. Falls Coverage unter Schwelle: fehlende Branches identifizieren (`term-missing`-Output) und Tests ergaenzen, bevor weiter.
 
 - [ ] **Step 9.2: AI-USAGE-Eintrag verfassen**
 

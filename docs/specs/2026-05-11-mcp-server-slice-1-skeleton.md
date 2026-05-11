@@ -125,72 +125,34 @@ Env-Var: `PRISMA_TOOL_API_KEY` (Backend), `PRISMA_API_KEY` (MCP-Client — Spec 
 
 ## 5. Tool-Implementation: `run_ranking`
 
+> **Reference-Draft** — der executable Code lebt im Plan-Dokument (Task 6.4) nach Reality-Check. Diese Sektion zeigt die Intention, nicht den final-Stand.
+
+**Drifts gegen diesen Draft (siehe Plan §6.4):**
+- REST-API-Feld heisst `weight_config`, nicht `weights` → Mapping im Tool
+- `RunResponse` enthaelt **kein** `universe_name` → wird aus MCP-Output gestrichen
+- `RankingItem` enthaelt **kein** `name`-Feld → top_10 nur mit `ticker`
+- `total_rank` ist `int | None` → explizite Sortierung im Tool (Backend-Pre-Sortierung nicht garantiert)
+
 ```python
-# backend/interfaces/mcp/tools/run_ranking.py
-from typing import Annotated
-from pydantic import Field
-
-from backend.interfaces.mcp.rest_client import RESTClient
-
-
-async def run_ranking(
-    client: RESTClient,
-    universe_id: Annotated[str, Field(description="UUID des Universums")],
-    weights: Annotated[
-        dict[str, float] | None,
-        Field(description="Optionale Gewichte pro Modell, muss zu 1.0 summieren"),
-    ] = None,
-) -> dict:
+# Intention — siehe Plan Task 6.4 fuer executable Form
+async def run_ranking(client, *, universe_id, weights=None) -> dict:
     """Loest einen neuen Ranking-Run aus.
-
-    Args:
-        universe_id: UUID des zu rankenden Universums.
-        weights: Optional. Gewichte pro Modell. Fehlt: Gleichgewichtung.
 
     Returns:
         {
           "model_run_id": str,
-          "universe_name": str,
           "n_stocks": int,
           "top_10_summary": [
-            {"ticker": str, "name": str, "total_rank": int, "sweet_spot": bool}
+            {"ticker": str, "total_rank": int, "sweet_spot": bool}
           ]
         }
     """
-    # 1. Validate weights sum if provided
-    if weights is not None:
-        total = sum(weights.values())
-        if not (0.99 <= total <= 1.01):
-            raise ValueError(f"weights must sum to 1.0, got {total}")
-
-    # 2. Call backend
-    payload = {"universe_id": universe_id}
-    if weights is not None:
-        payload["weights"] = weights
-
-    response = await client.post("/api/v1/runs", json=payload)
-
-    # 3. Map response -> MCP-shape (subset of backend response)
-    run = response["run"]  # RunResponse-Shape
-    rankings = await client.get(f"/api/v1/runs/{run['id']}/rankings")
-    top_10 = [
-        {
-            "ticker": r["ticker"],
-            "name": r.get("name", r["ticker"]),
-            "total_rank": r["total_rank"],
-            "sweet_spot": r.get("sweet_spot", False),
-        }
-        for r in rankings[:10]
-    ]
-    return {
-        "model_run_id": run["id"],
-        "universe_name": run.get("universe_name", ""),
-        "n_stocks": len(rankings),
-        "top_10_summary": top_10,
-    }
+    # 1. Validate weights sum locally (fast-fail)
+    # 2. POST /api/v1/runs mit weight_config-Feld
+    # 3. GET /api/v1/runs/{id}/rankings
+    # 4. Sort by total_rank (None ans Ende), nimm Top-10
+    # 5. Mappe is_sweet_spot -> sweet_spot
 ```
-
-**Mapping-Hinweis:** `RunResponse` aus `schemas/runs.py` muss `universe_name` enthalten — checken; sonst weglassen oder Backend-side erweitern. Plan-Phase entscheidet final.
 
 ## 6. REST-Client
 
@@ -241,7 +203,7 @@ import httpx
 class MCPError(Exception):
     """Basis-Exception. Tool-Handler raisen das; FastMCP fangt + serialisiert."""
 
-    def __init__(self, code: str, **fields: str | int) -> None:
+    def __init__(self, code: str, **fields: Any) -> None:
         self.code = code
         self.fields = fields
         super().__init__(f"{code}: {fields}")
@@ -310,7 +272,8 @@ UPSTREAM_UNAVAILABLE wird im RESTClient-Try-Except gefangen (httpx.ConnectError,
 | Risiko | Wahrscheinlichkeit | Mitigation |
 |---|---|---|
 | MCP-SDK-API hat sich geaendert (>=1.2) | mittel | Plan-Phase verifiziert konkrete Imports + FastMCP-Signatur |
-| `RunResponse` enthaelt keinen `universe_name` | hoch | Plan-Phase liest schema; falls fehlt: leerer String im Tool-Output (kein Backend-Change) |
+| `RunResponse` enthaelt keinen `universe_name` | **bestaetigt** | Aus MCP-Output gestrichen (kein Backend-Change) |
+| `RankingItem.total_rank` ist `int \| None` + Backend-Sortierung nicht garantiert | bestaetigt | Tool sortiert explizit (None ans Ende), bevor Top-10 geschnitten wird |
 | `require_api_key` bricht bestehende Frontend-Calls | niedrig (opt-in default-off) | Tests behalten current behavior, solange `tool_api_key` leer |
 | Universum-Existenz vor MCP-Tool unbekannt | mittel | Slice deckt nur happy-404 ab; `list_universes` ist Folge-Tool |
 
