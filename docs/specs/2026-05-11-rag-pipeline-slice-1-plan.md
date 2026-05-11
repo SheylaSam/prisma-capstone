@@ -456,7 +456,7 @@ def upgrade() -> None:
         sa.Column("ticker", sa.String(10), nullable=False),
         sa.Column("doc_type", sa.String(8), nullable=False),
         sa.Column("filing_date", sa.Date(), nullable=False),
-        sa.Column("url", sa.Text(), nullable=False, unique=True),
+        sa.Column("url", sa.Text(), nullable=False),
         sa.Column("raw_text_hash", sa.String(64), nullable=True),
         sa.Column(
             "ingested_at",
@@ -464,6 +464,9 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("now()"),
         ),
+        # Named Constraint statt unique=True — Adapter detektiert DuplicateUrl
+        # per Constraint-Name (robust gegen Postgres-Error-Message-Aenderungen)
+        sa.UniqueConstraint("url", name="uq_documents_url"),
     )
     op.create_index("ix_documents_ticker", "documents", ["ticker"])
 
@@ -580,7 +583,16 @@ from datetime import date, datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Date, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -589,6 +601,9 @@ from backend.infrastructure.persistence.base import Base
 
 class DocumentORM(Base):
     __tablename__ = "documents"
+    __table_args__ = (
+        UniqueConstraint("url", name="uq_documents_url"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -596,14 +611,10 @@ class DocumentORM(Base):
     ticker: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
     doc_type: Mapped[str] = mapped_column(String(8), nullable=False)
     filing_date: Mapped[date] = mapped_column(Date(), nullable=False)
-    url: Mapped[str] = mapped_column(Text(), nullable=False, unique=True)
+    url: Mapped[str] = mapped_column(Text(), nullable=False)
     raw_text_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     ingested_at: Mapped[datetime] = mapped_column(
-        # mit timezone=True, gleicher Stil wie ResearchMemoORM
-        # nicht: sa.DateTime(timezone=True)
-        # sondern: aus sqlalchemy import DateTime (oder in __init__-imports)
-        # In diesem Snippet ueber den Import gehandhabt:
-        __import__("sqlalchemy").DateTime(timezone=True),
+        DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
     )
@@ -631,31 +642,16 @@ class EmbeddingChunkORM(Base):
     )
 ```
 
-**Wichtig:** Spalte heisst in der DB `metadata`, das Python-Attribute aber
-`chunk_metadata` — `metadata` ist reserved auf `Base` (Base.metadata) und
-kann nicht als Mapped[]-Attribute genutzt werden. SQLA mapped es via
-`mapped_column("metadata", ...)` korrekt.
+**Hinweise:**
+- DB-Spalte heisst `metadata`, Python-Attribute aber `chunk_metadata` —
+  `metadata` ist reserved auf `Base` (Base.metadata). SQLA mapped es via
+  `mapped_column("metadata", ...)` korrekt.
+- `uq_documents_url` als named Constraint (statt `unique=True`) — damit der
+  Adapter `DuplicateUrl` per Constraint-Name detektieren kann (robust gegen
+  Postgres-Error-Message-Aenderungen). Die Migration in Task 5 muss
+  konsistent `name="uq_documents_url"` setzen (s. Anpassung in Task 5).
 
-- [ ] **Step 6.2: Replace odd __import__ workaround**
-
-Die `__import__`-Notation oben ist Plan-Demonstration. Tatsaechlich:
-ergaenze den direkten Import oben:
-
-```python
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
-```
-
-Dann verwenden:
-
-```python
-ingested_at: Mapped[datetime] = mapped_column(
-    DateTime(timezone=True),
-    nullable=False,
-    server_default=func.now(),
-)
-```
-
-- [ ] **Step 6.3: Verify Import**
+- [ ] **Step 6.2: Verify Import**
 
 ```bash
 source .venv/bin/activate
@@ -665,7 +661,7 @@ mypy backend/infrastructure/persistence/models/embedding.py
 
 Expected: `OK` und mypy gruen.
 
-- [ ] **Step 6.4: Commit**
+- [ ] **Step 6.3: Commit**
 
 ```bash
 git add backend/infrastructure/persistence/models/embedding.py
@@ -692,7 +688,7 @@ SQLAResearchMemoRepository) — vermeidet Transaction-Leaks.
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -730,7 +726,9 @@ class SQLAEmbeddingRepository(EmbeddingRepository):
                 await session.commit()
             except IntegrityError as exc:
                 await session.rollback()
-                if "url" in str(exc.orig).lower():
+                # Detection per Constraint-Name (uq_documents_url ist in Migration
+                # benannt) — robust gegen Postgres-Error-Message-Aenderungen.
+                if "uq_documents_url" in str(exc.orig):
                     raise DuplicateUrl(doc.url) from exc
                 raise
 
@@ -771,7 +769,6 @@ class SQLAEmbeddingRepository(EmbeddingRepository):
             return _orm_to_doc(row) if row else None
 
     async def count_chunks(self, document_id: UUID) -> int:
-        from sqlalchemy import func
         async with self._session_factory() as session:
             stmt = select(func.count(EmbeddingChunkORM.id)).where(
                 EmbeddingChunkORM.document_id == document_id
@@ -824,17 +821,11 @@ git commit -m "feat(rag): SQLAEmbeddingRepository-Adapter (Slice 1 Task 7)"
 **Files:**
 - Create: `backend/tests/integration/persistence/test_embedding_repository.py`
 
-- [ ] **Step 8.1: Existing test-fixture-pattern lesen**
+- [ ] **Step 8.1: Write Integration-Tests**
 
-```bash
-grep -A 30 "db_session\|@pytest_asyncio.fixture" \
-    backend/tests/integration/persistence/test_research_memo_repository.py | head -60
-```
-
-Notiere konkret welche Fixtures aus `conftest.py` verfuegbar sind
-(`db_session`, `session_factory`, etc.). Wir nutzen das gleiche Pattern.
-
-- [ ] **Step 8.2: Write Integration-Tests**
+Fixture-Pattern: `db_session` + `session_factory` aus
+`backend/tests/integration/persistence/conftest.py` (gleicher Pfad-Scope
+wie `test_research_memo_repository.py`). Kein Lookup-Step noetig.
 
 Create `backend/tests/integration/persistence/test_embedding_repository.py`:
 
@@ -977,12 +968,18 @@ class TestCascadeDelete:
         assert await repo.count_chunks(doc.id) == 0
 
 
+def _unique_ticker() -> str:
+    """Eindeutiger 6-stelliger Ticker pro Test-Lauf — verhindert Akkumulation
+    aus vorherigen Runs (Test-DB ist persistent zwischen Tests)."""
+    return f"T{uuid.uuid4().hex[:5].upper()}"
+
+
 class TestListDocuments:
     async def test_list_all(self, repo: SQLAEmbeddingRepository) -> None:
         # Test-DB ist persistent zwischen Tests, daher unique URLs nutzen,
         # nicht 'genau N docs' asserten — sondern dass unsere docs drin sind.
-        d1 = _new_doc(ticker="AAPL")
-        d2 = _new_doc(ticker="MSFT")
+        d1 = _new_doc(ticker=_unique_ticker())
+        d2 = _new_doc(ticker=_unique_ticker())
         await repo.save_document(d1)
         await repo.save_document(d2)
         all_docs = await repo.list_documents()
@@ -991,30 +988,50 @@ class TestListDocuments:
         assert d2.url in urls
 
     async def test_filtered_by_ticker(self, repo: SQLAEmbeddingRepository) -> None:
-        d_aapl = _new_doc(ticker="AAPL")
-        d_msft = _new_doc(ticker="MSFT")
-        await repo.save_document(d_aapl)
-        await repo.save_document(d_msft)
-        aapl_docs = await repo.list_documents(ticker="AAPL")
-        urls = {d.url for d in aapl_docs}
-        assert d_aapl.url in urls
-        assert d_msft.url not in urls
+        ticker_a = _unique_ticker()
+        ticker_b = _unique_ticker()
+        d_a = _new_doc(ticker=ticker_a)
+        d_b = _new_doc(ticker=ticker_b)
+        await repo.save_document(d_a)
+        await repo.save_document(d_b)
+        a_docs = await repo.list_documents(ticker=ticker_a)
+        urls = {d.url for d in a_docs}
+        assert d_a.url in urls
+        assert d_b.url not in urls
 
     async def test_sorted_desc_by_ingested_at(
         self, repo: SQLAEmbeddingRepository
     ) -> None:
-        d_old = _new_doc(ticker="ZZZX")  # eindeutiger Ticker fuer Filter
+        ticker = _unique_ticker()
+        # Explizite ingested_at-Werte — verhindert datetime.now()-µs-Race-Flakes.
+        d_old = _new_doc(
+            ticker=ticker,
+            url=f"https://sec.gov/{uuid.uuid4()}.pdf",
+        )
+        d_old = Document(
+            id=d_old.id, ticker=d_old.ticker, doc_type=d_old.doc_type,
+            filing_date=d_old.filing_date, url=d_old.url,
+            raw_text_hash=d_old.raw_text_hash,
+            ingested_at=datetime(2024, 1, 1, tzinfo=UTC),
+        )
+        d_new = _new_doc(
+            ticker=ticker,
+            url=f"https://sec.gov/{uuid.uuid4()}.pdf",
+        )
+        d_new = Document(
+            id=d_new.id, ticker=d_new.ticker, doc_type=d_new.doc_type,
+            filing_date=d_new.filing_date, url=d_new.url,
+            raw_text_hash=d_new.raw_text_hash,
+            ingested_at=datetime(2024, 6, 1, tzinfo=UTC),
+        )
         await repo.save_document(d_old)
-        d_new = _new_doc(ticker="ZZZX")
         await repo.save_document(d_new)
-        docs = await repo.list_documents(ticker="ZZZX")
-        # Neueste zuerst — server_default=now() macht das deterministisch
-        # falls die DB-Writes monoton timestampen.
+        docs = await repo.list_documents(ticker=ticker)
         assert docs[0].url == d_new.url
         assert docs[-1].url == d_old.url
 ```
 
-- [ ] **Step 8.3: Run Integration-Tests**
+- [ ] **Step 8.2: Run Integration-Tests**
 
 ```bash
 source .venv/bin/activate
@@ -1029,7 +1046,7 @@ Expected: alle Tests gruen. Falls Tests vorher noch nicht alle Fixtures kennen
 (`session_factory`, `db_session`): `backend/tests/integration/conftest.py`
 und/oder `backend/tests/conftest.py` lesen und passende Fixtures auswaehlen.
 
-- [ ] **Step 8.4: Commit**
+- [ ] **Step 8.3: Commit**
 
 ```bash
 git add backend/tests/integration/persistence/test_embedding_repository.py
