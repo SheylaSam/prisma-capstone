@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
+import anthropic
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
@@ -75,6 +76,14 @@ async def generate_memo(
         )
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except anthropic.APITimeoutError as exc:
+        # Spec §7: SDK-Retries (max_retries=3) erschoepft, Upstream antwortet
+        # nicht innerhalb 30s. 504 signalisiert "transient — retry", Client
+        # kann den Call wiederholen ohne Annahme dass Memo schon generiert ist.
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Anthropic API timeout — bitte erneut versuchen",
+        ) from exc
     return MemoResponse.from_entity(memo)
 
 

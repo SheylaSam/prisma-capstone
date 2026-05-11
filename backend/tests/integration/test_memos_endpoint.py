@@ -109,6 +109,33 @@ def test_get_memo_returns_404_when_missing(
     assert resp.status_code == 404
 
 
+def test_post_generate_returns_504_on_anthropic_timeout(
+    app_with_mock_service: tuple[Any, AsyncMock],
+) -> None:
+    """B2 (PR #64 Deep-Review): SDK wirft APITimeoutError nach max_retries
+    erschoepft. Router mappt das auf 504 Gateway Timeout, damit der Client
+    'transient — retry' versteht (nicht 500 'permanent error').
+    """
+    import anthropic
+    import httpx
+
+    app, mock_service = app_with_mock_service
+    mock_service.generate_memo = AsyncMock(
+        side_effect=anthropic.APITimeoutError(
+            request=httpx.Request("POST", "https://api.anthropic.com/v1/messages"),
+        )
+    )
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/v1/memos/generate",
+            json={"stock_id": str(uuid4()), "model_run_id": str(uuid4())},
+        )
+
+    assert resp.status_code == 504
+    assert "timeout" in resp.json()["detail"].lower()
+
+
 def test_post_generate_sets_is_error_when_fallback_memo(
     app_with_mock_service: tuple[Any, AsyncMock],
 ) -> None:
