@@ -25,7 +25,7 @@
 | `backend/domain/entities/document.py` | CREATE | `Document` frozen-dataclass |
 | `backend/domain/entities/embedding_chunk.py` | CREATE | `EmbeddingChunk` frozen-dataclass |
 | `backend/domain/repositories/embedding_repository.py` | CREATE | `EmbeddingRepository` ABC + `DuplicateUrl` Exception |
-| `backend/alembic/versions/0006_enable_pgvector_and_create_embeddings.py` | CREATE | pgvector-Extension + 2 Tabellen + IVFFlat-Index |
+| `backend/alembic/versions/0007_enable_pgvector_and_create_embeddings.py` | CREATE | pgvector-Extension + 2 Tabellen + IVFFlat-Index |
 | `backend/infrastructure/persistence/models/embedding.py` | CREATE | `DocumentORM` + `EmbeddingChunkORM` (SQLA-Mapped) |
 | `backend/infrastructure/persistence/repositories/embedding_repository.py` | CREATE | `SQLAEmbeddingRepository`-Adapter |
 | `backend/tests/unit/domain/entities/test_document.py` | CREATE | Entity-Validation |
@@ -403,27 +403,27 @@ git commit -m "feat(rag): EmbeddingRepository-Port (Slice 1 Task 4)"
 ## Task 5: Alembic-Migration
 
 **Files:**
-- Create: `backend/alembic/versions/0006_enable_pgvector_and_create_embeddings.py`
+- Create: `backend/alembic/versions/0007_enable_pgvector_and_create_embeddings.py`
 
 - [ ] **Step 5.1: Identify down_revision**
 
-Verifizieren dass `0005_create_research_memos.py` mit `revision = "0005"` benannt ist:
+Verifizieren dass `0006_alter_ranking_interpretation_to_1000.py` mit `revision = "0006"` benannt ist (kommt aus PR #64 deep-review-fix, merged vor RAG-Slice):
 
 ```bash
-grep -l 'revision: str = "0005"' backend/alembic/versions/*.py
+grep -l 'revision: str = "0006"' backend/alembic/versions/*.py
 ```
 
-Expected: 1 Treffer (`0005_create_research_memos.py`).
+Expected: 1 Treffer (`0006_alter_ranking_interpretation_to_1000.py`).
 
 - [ ] **Step 5.2: Write Migration**
 
-Create `backend/alembic/versions/0006_enable_pgvector_and_create_embeddings.py`:
+Create `backend/alembic/versions/0007_enable_pgvector_and_create_embeddings.py`:
 
 ```python
 """enable pgvector extension and create embedding tables
 
-Revision ID: 0006
-Revises: 0005
+Revision ID: 0007
+Revises: 0006
 Create Date: 2026-05-11
 """
 
@@ -434,8 +434,8 @@ from alembic import op
 from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0006"
-down_revision: str | None = "0005"
+revision: str = "0007"
+down_revision: str | None = "0006"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -523,7 +523,7 @@ DATABASE_URL=postgresql+asyncpg://prisma:prisma@localhost:5432/prisma \
     alembic upgrade head
 ```
 
-Expected: `Running upgrade 0005 -> 0006, enable pgvector ...`
+Expected: `Running upgrade 0006 -> 0007, enable pgvector ...`
 
 ```bash
 # Inspect: Tabellen + Index existieren
@@ -541,7 +541,7 @@ DATABASE_URL=postgresql+asyncpg://prisma:prisma@localhost:5432/prisma \
     alembic downgrade -1
 ```
 
-Expected: `Running downgrade 0006 -> 0005, enable pgvector ...`
+Expected: `Running downgrade 0007 -> 0006, enable pgvector ...`
 
 ```bash
 # Inspect: Tabellen weg
@@ -560,8 +560,8 @@ DATABASE_URL=postgresql+asyncpg://prisma:prisma@localhost:5432/prisma \
 - [ ] **Step 5.6: Commit**
 
 ```bash
-git add backend/alembic/versions/0006_enable_pgvector_and_create_embeddings.py
-git commit -m "feat(rag): Migration 0006 pgvector + embedding tables (Slice 1 Task 5)"
+git add backend/alembic/versions/0007_enable_pgvector_and_create_embeddings.py
+git commit -m "feat(rag): Migration 0007 pgvector + embedding tables (Slice 1 Task 5)"
 ```
 
 ---
