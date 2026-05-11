@@ -231,22 +231,21 @@ class NarrativeService:
             memo_schema = self._build_error_memo_schema(stock=stock, ranking=ranking)
 
         # 6. Persist
-        memo_entity = ResearchMemo(
-            id=uuid4(),
-            stock_id=stock_id,
-            model_run_id=model_run_id,
-            language=language,
-            created_at=datetime.now(tz=UTC),
-            one_liner=memo_schema.one_liner,
-            ranking_interpretation=memo_schema.ranking_interpretation,
-            sweet_spot=memo_schema.sweet_spot,
-            sweet_spot_explanation=memo_schema.sweet_spot_explanation,
-            contradictions=list(memo_schema.contradictions),
-            key_strengths=list(memo_schema.key_strengths),
-            key_risks=list(memo_schema.key_risks),
-            confidence=memo_schema.confidence,
-            model_version=memo_schema.model_version,
-        )
+        # Defense-in-depth: Entity-Constraints sind heute laxer als Schema
+        # (Entity = DB-Längen, Schema = LLM-Output). Falls künftige Drift dazu
+        # führt dass ein Schema-valides Output Entity-Validation verletzt
+        # (z.B. Schema lockerer als Entity), darf NICHT 500 escalieren —
+        # gleicher Error-Memo-Pfad wie bei Schema-Verletzung.
+        try:
+            memo_entity = self._build_memo_entity(
+                memo_schema, stock_id=stock_id, model_run_id=model_run_id, language=language
+            )
+        except ValidationError:
+            self._dump_malformed_response(response, stock_id=stock_id, run_id=model_run_id)
+            error_schema = self._build_error_memo_schema(stock=stock, ranking=ranking)
+            memo_entity = self._build_memo_entity(
+                error_schema, stock_id=stock_id, model_run_id=model_run_id, language=language
+            )
         await self._memo_repo.save(memo_entity)
 
         # UPSERT behaelt bei Konflikt die Original-id und Original-created_at
@@ -259,6 +258,31 @@ class NarrativeService:
                 "zwischen save() und reload — DB-Inkonsistenz?"
             )
         return persisted
+
+    def _build_memo_entity(
+        self,
+        schema: Any,
+        *,
+        stock_id: UUID,
+        model_run_id: UUID,
+        language: Literal["de", "en"],
+    ) -> ResearchMemo:
+        return ResearchMemo(
+            id=uuid4(),
+            stock_id=stock_id,
+            model_run_id=model_run_id,
+            language=language,
+            created_at=datetime.now(tz=UTC),
+            one_liner=schema.one_liner,
+            ranking_interpretation=schema.ranking_interpretation,
+            sweet_spot=schema.sweet_spot,
+            sweet_spot_explanation=schema.sweet_spot_explanation,
+            contradictions=list(schema.contradictions),
+            key_strengths=list(schema.key_strengths),
+            key_risks=list(schema.key_risks),
+            confidence=schema.confidence,
+            model_version=schema.model_version,
+        )
 
     def _try_validate_tool_response(self, response: Any) -> ResearchMemoSchema | None:
         """Liefert die validierte Schema-Instanz oder None bei Fehler."""

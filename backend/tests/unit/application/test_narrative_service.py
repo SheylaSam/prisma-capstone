@@ -633,3 +633,89 @@ async def test_generate_memo_force_regenerate_bypasses_cache() -> None:
     memo_repo.save.assert_awaited_once()
     # Returned memo is the freshly generated one
     assert result.one_liner == "Frischer Memo nach force_regenerate."
+
+
+# ---------------------------------------------------------------------------
+# B1 (PR #64 Deep-Review) — Defense-in-depth: Entity-Konstruktion in try/except
+# ---------------------------------------------------------------------------
+
+
+async def test_generate_memo_persists_error_memo_on_entity_validation_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Falls Schema-Validation passt aber Entity-Konstruktion mit ValidationError
+    fehlschlaegt (kuenftige Schema/Entity-Drift), darf NICHT 500 escalieren —
+    Error-Memo-Pfad muss wie bei Schema-Verletzung greifen.
+    """
+    monkeypatch.chdir(tmp_path)
+
+    stock_id, run_id = uuid4(), uuid4()
+
+    expected_error = _sample_memo(
+        stock_id=stock_id,
+        run_id=run_id,
+        one_liner="Memo-Generierung fehlgeschlagen — bitte Run regenerieren",
+        confidence="low",
+        model_version="error-fallback",
+    )
+    memo_repo = AsyncMock()
+    memo_repo.get = AsyncMock(side_effect=[None, expected_error])
+    memo_repo.save = AsyncMock()
+    stock_repo = AsyncMock()
+    stock_repo.get = AsyncMock(return_value=_stock(stock_id=stock_id))
+    run_repo = AsyncMock()
+    run_repo.get_results = AsyncMock(return_value=_sample_results())
+
+    # Entity-invalid: ranking_interpretation > Entity max=1000. Bypasst Schema-
+    # Validation via Monkeypatch — simuliert exakt das Schema/Entity-Drift-Szenario.
+    entity_invalid = SimpleNamespace(
+        one_liner="Defensiver Quality-Kern.",
+        ranking_interpretation="x" * 1500,
+        sweet_spot=True,
+        sweet_spot_explanation=None,
+        contradictions=[],
+        key_strengths=["Top 10% Quality"],
+        key_risks=["Bewertungs-Multiples"],
+        confidence="high",
+        model_version="claude-sonnet-4-6",
+    )
+    monkeypatch.setattr(
+        NarrativeService,
+        "_try_validate_tool_response",
+        lambda self, response: entity_invalid,
+    )
+
+    response_stub = SimpleNamespace(
+        id="msg_drift",
+        usage=SimpleNamespace(input_tokens=2300, output_tokens=487),
+        content=[SimpleNamespace(type="tool_use", name="submit_memo", input={})],
+        stop_reason="tool_use",
+    )
+    llm = AsyncMock()
+    llm.messages_create = AsyncMock(return_value=response_stub)
+    prompt_loader = SimpleNamespace(render=Mock(side_effect=lambda name, ctx: "<rendered>"))
+
+    service = NarrativeService(
+        memo_repository=memo_repo,
+        run_repository=run_repo,
+        stock_repository=stock_repo,
+        llm_client=llm,
+        prompt_loader=prompt_loader,  # type: ignore[arg-type]
+    )
+
+    result = await service.generate_memo(stock_id, run_id)
+
+    # Error-Memo wurde persistiert — kein 500-Crash
+    memo_repo.save.assert_awaited_once()
+    saved = memo_repo.save.await_args.args[0]
+    assert saved.model_version == "error-fallback"
+    assert "fehlgeschlagen" in saved.one_liner.lower()
+
+    # Returnwert ist die persisted Error-Row (Reload-Pattern wie bei Happy-Path)
+    assert result is expected_error
+
+    # Raw-Response in logs/malformed_memos/ (Forensik-Pfad bleibt aktiv)
+    log_dir = tmp_path / "logs" / "malformed_memos"
+    assert log_dir.exists()
+    assert len(list(log_dir.glob("*.json"))) == 1

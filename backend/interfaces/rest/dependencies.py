@@ -149,8 +149,17 @@ def get_prompt_loader() -> PromptTemplateLoader:
 async def get_anthropic_client(
     settings: Settings = Depends(get_settings),
 ) -> Any:
-    """Instanziiert den Anthropic AsyncAnthropic-Client mit dem API-Key aus Settings."""
-    return anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    """Instanziiert den Anthropic AsyncAnthropic-Client mit Spec-konformen Timeouts.
+
+    Spec §7 (Single-Memo-Slice): `timeout=30.0`, `max_retries=3`. SDK-Defaults
+    sind 10-Minuten-Timeout / 2 Retries — bei langsam-antwortender API blockiert
+    ein FastAPI-Worker sonst 10 Minuten pro Call.
+    """
+    return anthropic.AsyncAnthropic(
+        api_key=settings.anthropic_api_key,
+        timeout=30.0,
+        max_retries=3,
+    )
 
 
 async def get_llm_client(
