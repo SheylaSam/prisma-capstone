@@ -77,7 +77,7 @@ backend/domain/entities/memo_batch_job.py                  ← neue Pydantic-Ent
 backend/domain/repositories/memo_batch_job_repository.py    ← neuer Port (ABC)
 backend/infrastructure/persistence/repositories/memo_batch_job_repository.py  ← SQLA-Adapter
 backend/infrastructure/persistence/models/memo_batch_job.py  ← ORM-Model
-alembic/versions/0006_memo_batch_jobs.py                    ← Migration
+alembic/versions/0007_memo_batch_jobs.py                    ← Migration
 
 backend/application/services/narrative_service.py
     ↓ erweitert um:
