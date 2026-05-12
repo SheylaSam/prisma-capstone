@@ -1,8 +1,15 @@
 """create memo_batch_jobs
 
-Revision ID: 0006_memo_batch_jobs
-Revises: 0005
+Revision ID: 0007
+Revises: 0006
 Create Date: 2026-05-08
+
+Hinweis: Ursprueliche Branch-Revision war "0006_memo_batch_jobs"/down="0005".
+Bumped auf 0007/down="0006" wegen Migration-Kollision mit PR #64s
+0006_alter_ranking_interpretation_to_1000.py (chained ebenfalls von 0005).
+Neue Chain: 0005 -> 0006 (alter_ranking_interp aus PR #64)
+                 -> 0007 (memo_batch_jobs aus dieser PR).
+Rebase auf post-#64-Merge-main faellt damit ohne Konflikt.
 """
 
 from collections.abc import Sequence
@@ -13,8 +20,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 # revision identifiers
-revision: str = "0006_memo_batch_jobs"
-down_revision: str | None = "0005"
+revision: str = "0007"
+down_revision: str | None = "0006"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -240,7 +240,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 **Files:**
 - Create: `backend/infrastructure/persistence/models/memo_batch_job.py`
 - Test: `backend/tests/unit/infrastructure/test_memo_batch_job_orm.py`
-- Create (via alembic): `alembic/versions/0006_memo_batch_jobs.py`
+- Create (via alembic): `alembic/versions/0007_memo_batch_jobs.py`
 
 - [ ] **Step 1: ORM-Test schreiben**
 
@@ -390,16 +390,16 @@ Expected: 5 passed.
 source .venv/bin/activate && alembic revision -m "create memo_batch_jobs"
 ```
 
-Erwartete Datei: `alembic/versions/0006_<hash>_create_memo_batch_jobs.py` (umbenennen zu `0006_memo_batch_jobs.py`).
+Erwartete Datei: `alembic/versions/0007_<hash>_create_memo_batch_jobs.py` (umbenennen zu `0007_memo_batch_jobs.py`).
 
 - [ ] **Step 6: Migration manuell editieren**
 
 ```python
-# alembic/versions/0006_memo_batch_jobs.py
+# alembic/versions/0007_memo_batch_jobs.py
 """create memo_batch_jobs
 
-Revision ID: 0006_memo_batch_jobs
-Revises: 0005_research_memos
+Revision ID: 0007
+Revises: 0006
 Create Date: 2026-05-08
 """
 
@@ -410,8 +410,8 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 
 # revision identifiers
-revision: str = "0006_memo_batch_jobs"
-down_revision: str | None = "0005_research_memos"
+revision: str = "0007"
+down_revision: str | None = "0006"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -472,14 +472,14 @@ Expected: All checks passed!
 - [ ] **Step 9: Commit**
 
 ```bash
-git add backend/infrastructure/persistence/models/memo_batch_job.py backend/tests/unit/infrastructure/test_memo_batch_job_orm.py alembic/versions/0006_memo_batch_jobs.py
+git add backend/infrastructure/persistence/models/memo_batch_job.py backend/tests/unit/infrastructure/test_memo_batch_job_orm.py alembic/versions/0007_memo_batch_jobs.py
 git commit -m "feat(persistence): memo_batch_jobs Tabelle + ORM (build-step 3/12)
 
 ORM-Model mit FK zu ranking_runs (CASCADE), CHECK-Constraints fuer top_n,
 language, status. JSONB fuer failed_stock_ids. Naming-Convention-Suffix
 in __table_args__ (analog Foundation PR #54).
 
-Alembic-Migration 0006 mit upgrade/downgrade-Roundtrip verifiziert.
+Alembic-Migration 0007 mit upgrade/downgrade-Roundtrip verifiziert.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ```
