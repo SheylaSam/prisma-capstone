@@ -56,7 +56,12 @@ class SQLAEmbeddingRepository(EmbeddingRepository):
         async with self._session_factory() as session:
             # UPSERT: bei (document_id, chunk_idx)-Konflikt update statt fehlschlagen.
             # Macht Re-Ingestion idempotent.
-            stmt = pg_insert(EmbeddingChunkORM).values(
+            # `pg_insert` gegen die `__table__` (statt der ORM-Klasse) — damit
+            # konsistent DB-Column-Namen (`metadata`) verwendet werden koennen,
+            # ohne mit `Base.metadata` zu kollidieren (was bei pg_insert(ORM)
+            # einen Mapping-Konflikt zwischen ORM-Attribute `chunk_metadata` und
+            # Column `metadata` ausloest).
+            stmt = pg_insert(EmbeddingChunkORM.__table__).values(  # type: ignore[arg-type]
                 [
                     {
                         "id": c.id,
