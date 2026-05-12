@@ -93,6 +93,12 @@ def test_post_batch_returns_501_language_en(app_with_mock_service: Any) -> None:
 
 
 def test_post_batch_returns_402_budget_exceeded(app_with_mock_service: Any) -> None:
+    """W2 (PR #70): BudgetCapExceeded propagiert NICHT mehr per-route, sondern
+    durch den globalen Handler — der liefert 402 plus strukturierten Body und
+    `Retry-After`-Header. Test prueft beide Aspekte um sicherzustellen, dass
+    der globale Handler tatsaechlich aktiv ist (nicht ein vergessener
+    per-route-Catch).
+    """
     app, service = app_with_mock_service
     service.start_batch = AsyncMock(
         side_effect=BudgetCapExceeded(
@@ -109,6 +115,15 @@ def test_post_batch_returns_402_budget_exceeded(app_with_mock_service: Any) -> N
         )
 
     assert resp.status_code == 402
+    # Globaler Handler-Fingerabdruck: strukturierter Body (kein simpler HTTPException-detail-Wrap)
+    body = resp.json()
+    assert body["error"] == "budget_cap_exceeded"
+    assert body["current_usd"] == 19.00
+    assert body["cap_usd"] == 20.00
+    # Retry-After-Header signalisiert dem Client wann das Cap zurueckgesetzt wird
+    retry_after = resp.headers.get("Retry-After")
+    assert retry_after is not None
+    assert int(retry_after) > 0
 
 
 def test_get_job_returns_404_unknown(app_with_mock_service: Any) -> None:
