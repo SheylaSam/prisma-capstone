@@ -19,7 +19,6 @@ from pydantic import BaseModel
 
 from backend.application.services.narrative_service import NarrativeService
 from backend.domain.entities.research_memo import ContradictionItem, ResearchMemo
-from backend.domain.errors import BudgetCapExceeded
 from backend.interfaces.rest.dependencies import get_narrative_service
 from backend.interfaces.rest.schemas.memo_batch import (
     BatchJobAcceptedResponse,
@@ -128,10 +127,11 @@ async def post_batch(
         )
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except BudgetCapExceeded as exc:
-        raise HTTPException(status_code=402, detail=str(exc)) from exc
     except NotImplementedError as exc:
         raise HTTPException(status_code=501, detail=str(exc)) from exc
+    # BudgetCapExceeded: NICHT lokal fangen — globaler Handler in
+    # exception_handlers.py liefert 402 mit strukturiertem Body + Retry-After.
+    # Konsistent ueber alle AI-Endpoints (PR #70 W2).
 
     return BatchJobAcceptedResponse(
         job_id=job.id,

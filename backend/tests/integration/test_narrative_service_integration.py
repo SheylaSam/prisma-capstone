@@ -190,6 +190,8 @@ async def test_full_pipeline_top_quality_fixture(
             prompt_loader=PromptTemplateLoader(),
             cost_tracker=cost_tracker,
             session_factory=session_factory,
+            stock_repo_factory=lambda s: SQLAStockRepository(session=s),
+            run_repo_factory=lambda s: SQLARankingRunRepository(session=s),
         )
 
         memo = await service.generate_memo(ids["stock_id"], ids["run_id"])
@@ -224,6 +226,8 @@ async def test_pydantic_fail_persists_error_memo(
             prompt_loader=PromptTemplateLoader(),
             cost_tracker=cost_tracker,
             session_factory=session_factory,
+            stock_repo_factory=lambda s: SQLAStockRepository(session=s),
+            run_repo_factory=lambda s: SQLARankingRunRepository(session=s),
         )
 
         memo = await service.generate_memo(ids["stock_id"], ids["run_id"])
@@ -263,6 +267,8 @@ async def test_cache_hit_smoke_two_sequential_calls(
             prompt_loader=PromptTemplateLoader(),
             cost_tracker=cost_tracker,
             session_factory=session_factory,
+            stock_repo_factory=lambda s: SQLAStockRepository(session=s),
+            run_repo_factory=lambda s: SQLARankingRunRepository(session=s),
         )
 
         await service.generate_memo(ids["stock_id"], ids["run_id"])

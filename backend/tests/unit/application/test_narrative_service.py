@@ -33,6 +33,8 @@ def _make_service(**overrides: Any) -> NarrativeService:
         "prompt_loader": AsyncMock(),
         "cost_tracker": AsyncMock(),
         "session_factory": Mock(),
+        "stock_repo_factory": Mock(return_value=AsyncMock()),
+        "run_repo_factory": Mock(return_value=AsyncMock()),
     }
     defaults.update(overrides)
     return NarrativeService(**defaults)
@@ -691,8 +693,13 @@ async def test_generate_memo_persists_error_memo_on_entity_validation_error(
         memo_repository=memo_repo,
         run_repository=run_repo,
         stock_repository=stock_repo,
+        batch_repository=AsyncMock(),
         llm_client=llm,
         prompt_loader=prompt_loader,  # type: ignore[arg-type]
+        cost_tracker=AsyncMock(),
+        session_factory=Mock(),
+        stock_repo_factory=Mock(return_value=AsyncMock()),
+        run_repo_factory=Mock(return_value=AsyncMock()),
     )
 
     result = await service.generate_memo(stock_id, run_id)
