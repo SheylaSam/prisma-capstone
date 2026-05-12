@@ -11,6 +11,7 @@ import zlib
 
 import numpy as np
 import pandas as pd
+from pandas.tseries.offsets import BDay
 
 from backend.domain.ports.market_data_provider import MarketDataProvider
 
@@ -24,7 +25,10 @@ class StubMarketDataProvider(MarketDataProvider):
     """Demo/Test-Provider mit deterministischem Random-Walk pro Ticker."""
 
     def __init__(self, end_date: pd.Timestamp | None = None) -> None:
-        self._end_date = end_date or pd.Timestamp.now(tz="UTC").normalize()
+        raw_end = end_date or pd.Timestamp.now(tz="UTC").normalize()
+        # bdate_range(end=...) length differs by 1 across pandas 3.0.2 ↔ 3.0.3
+        # when end falls on a weekend. Snap to prior business day for stability.
+        self._end_date = BDay().rollback(raw_end)
 
     async def get_prices(self, tickers: list[str]) -> pd.DataFrame:
         if not tickers:
