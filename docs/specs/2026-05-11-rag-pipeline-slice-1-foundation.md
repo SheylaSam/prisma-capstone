@@ -44,7 +44,7 @@ laeuft, ist die teuerste Unbekannte (Extension-Verfuegbarkeit) eliminiert.
 
 ```
 backend/alembic/versions/
-└── 0007_enable_pgvector_and_create_embeddings.py     (NEU)
+└── 0008_enable_pgvector_and_create_embeddings.py     (NEU)
     - CREATE EXTENSION IF NOT EXISTS vector
     - documents-Tabelle
     - embedding_chunks-Tabelle mit vector(2048)
@@ -194,13 +194,13 @@ Slice-3-Material (Retrieval-Service). Port-Erweiterung in Slice 3.
 
 ## 6. Migration
 
-`backend/alembic/versions/0007_enable_pgvector_and_create_embeddings.py`:
+`backend/alembic/versions/0008_enable_pgvector_and_create_embeddings.py`:
 
 ```python
 """enable pgvector and create embedding tables
 
-Revision ID: 0007
-Revises: 0006
+Revision ID: 0008
+Revises: 0007
 Create Date: 2026-05-11
 """
 
@@ -208,8 +208,8 @@ from alembic import op
 import sqlalchemy as sa
 import pgvector.sqlalchemy
 
-revision = "0007"
-down_revision = "0006"
+revision = "0008"
+down_revision = "0007"
 
 
 def upgrade() -> None:
@@ -282,7 +282,7 @@ muss real verifiziert werden.
 ## 8. Acceptance Criteria
 
 - [ ] `pgvector>=0.3` in pyproject.toml
-- [ ] Migration `0007_enable_pgvector_and_create_embeddings.py` laeuft up und down ohne Errors
+- [ ] Migration `0008_enable_pgvector_and_create_embeddings.py` laeuft up und down ohne Errors
 - [ ] `documents`- und `embedding_chunks`-Tabellen existieren mit korrekten Constraints
 - [ ] IVFFlat-Index ist angelegt und nutzbar (manueller Check via psql `\d embedding_chunks`)
 - [ ] `Document`- und `EmbeddingChunk`-Domain-Entities frozen + typed
