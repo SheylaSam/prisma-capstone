@@ -127,3 +127,38 @@ class TestRoundtripAndUpsert:
         assert loaded.failed_stock_ids == stock_ids
         # Full entity equality — verifies the complete roundtrip, not just failed_stock_ids
         assert loaded == job
+
+
+class TestMigrationConstraintNames:
+    """Verifiziert dass die Live-DB-Constraints nicht doppelt-praefixiert sind.
+
+    Hintergrund: NAMING_CONVENTION in Base.metadata wendet
+    `ck_%(table_name)s_%(constraint_name)s` auf jedes CheckConstraint-`name=`
+    automatisch an. Wenn die Migration `name="ck_memo_batch_jobs_top_n"` setzt,
+    entsteht in PG `ck_memo_batch_jobs_ck_memo_batch_jobs_top_n` (PR-#54-Bug).
+
+    Der ORM-Test fuer Constraint-Namen lebt im Mapping-Layer, der dort korrekt
+    ist; nur die Migration kann das Doubling verursachen — daher Test direkt
+    gegen pg_constraint.
+    """
+
+    async def test_no_double_prefix_in_pg_constraint(self, db_session: AsyncSession) -> None:
+        rows = await db_session.execute(
+            text(
+                "SELECT conname FROM pg_constraint "
+                "WHERE conrelid = 'memo_batch_jobs'::regclass AND contype = 'c'"
+            )
+        )
+        names = {r[0] for r in rows}
+        assert names, "Expected at least one CHECK constraint on memo_batch_jobs"
+        for name in names:
+            assert "ck_memo_batch_jobs_ck_memo_batch_jobs" not in name, (
+                f"Double-prefix in {name} (Migration setzt name= mit ck_<table>_-Praefix)"
+            )
+
+        expected = {
+            "ck_memo_batch_jobs_top_n",
+            "ck_memo_batch_jobs_language",
+            "ck_memo_batch_jobs_status",
+        }
+        assert expected.issubset(names), f"Missing constraints: {expected - names}"

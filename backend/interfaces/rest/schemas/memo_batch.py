@@ -30,6 +30,17 @@ class BatchMemoSummary(BaseModel):
 
 
 class BatchJobResponse(BaseModel):
+    """Out-Bound-Schema fuer GET /memos/jobs/{id}.
+
+    Constraints-Asymmetrie zur Entity (`MemoBatchJob`): die Entity haelt strikte
+    Domain-Constraints (`top_n: ge=1, le=100`, `error_message: max_length=1000`)
+    weil sie auf die DB-Spalten-Limits abbildet. Das Response-Schema lockert die
+    Constraints bewusst (analog `ResearchMemoSchema`): Read-Pfade sollen nicht
+    bei jedem GET nochmal validieren — die DB-Garantien stehen ueber den Wire-
+    Validations. Die strikte Validierung lebt im Write-Pfad (`BatchRequest`,
+    Entity-`__init__`), nicht im Read-Pfad.
+    """
+
     job_id: UUID
     model_run_id: UUID
     top_n: int

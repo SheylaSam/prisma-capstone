@@ -39,12 +39,10 @@ from backend.domain.repositories.stock_repository import StockRepository
 from backend.domain.schemas.research_memo_schema import ResearchMemoSchema
 from backend.infrastructure.llm.client import LLMClient
 from backend.infrastructure.llm.prompts.prompt_loader import PromptTemplateLoader
-from backend.infrastructure.persistence.repositories.ranking_run_repository import (
-    SQLARankingRunRepository,
-)
-from backend.infrastructure.persistence.repositories.stock_repository import (
-    SQLAStockRepository,
-)
+
+# Hexagonal: Application-Layer importiert KEINE konkreten Infrastructure-Klassen.
+# Repo-Konstruktion fuer Background-Worker laeuft ueber injizierte Factories
+# (`stock_repo_factory`, `run_repo_factory`) — Wiring in dependencies.py.
 
 
 class UniverseContext(BaseModel):
@@ -141,6 +139,8 @@ class NarrativeService:
         prompt_loader: PromptTemplateLoader,
         cost_tracker: CostTracker,
         session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]],
+        stock_repo_factory: Callable[[AsyncSession], StockRepository],
+        run_repo_factory: Callable[[AsyncSession], RankingRunRepository],
         model: str = "claude-sonnet-4-6",
         max_concurrent_batch_workers: int = 3,
         stale_batch_timeout_seconds: int = 600,
@@ -153,6 +153,11 @@ class NarrativeService:
         self._prompts = prompt_loader
         self._cost_tracker = cost_tracker
         self._session_factory = session_factory
+        # Factories fuer Background-Worker-Repos: Constructor-DI statt Module-
+        # Import (Hexagonal). Werden in _execute_batch mit eigenen Sessions
+        # aus session_factory aufgerufen.
+        self._stock_repo_factory = stock_repo_factory
+        self._run_repo_factory = run_repo_factory
         self._model = model
         self._max_concurrent_batch_workers = max_concurrent_batch_workers
         self._stale_batch_timeout_seconds = stale_batch_timeout_seconds
@@ -205,12 +210,21 @@ class NarrativeService:
         if not (1 <= top_n <= 100):
             raise ValueError(f"top_n must be 1..100, got {top_n}")
 
-        # Run existiert?
-        results = await self._run_repo.get_results(model_run_id)
+        # Run existiert? Via Factory + frische Session (nicht self._run_repo) —
+        # start_batch ist Background-Setup und darf nicht von der Request-
+        # Session abhaengen (die ist nach 202-Response moeglicherweise schon zu).
+        async with self._session_factory() as session:
+            validation_run_repo = self._run_repo_factory(session)
+            results = await validation_run_repo.get_results(model_run_id)
         if results is None:
             raise LookupError(f"Run {model_run_id} not found")
 
-        # Cost-Pre-Check (konservativ ~$0.025/Memo)
+        # Cost-Pre-Check (konservativ ~$0.025/Memo).
+        # Note: CostTracker.check_cap ist ein Soft-Limit ohne DB-Lock (Spec §5
+        # Cost-Tracker). Bei concurrent Batches koennen zwei Pre-Checks beide
+        # passieren und dann beide realen Kosten anfallen. Akzeptabel fuer
+        # Capstone-Volumen. Mid-Batch-BudgetCapExceeded fangen wir in _one()
+        # ab und propagieren in error_message.
         estimated_usd = Decimal(top_n) * Decimal("0.025")
         await self._cost_tracker.check_cap(estimated_usd=estimated_usd)
 
@@ -256,7 +270,7 @@ class NarrativeService:
 
         # Top-N stocks aus Run-Results bestimmen (eine eigene Session fuer den Lookup)
         async with self._session_factory() as session:
-            run_repo_init = SQLARankingRunRepository(session=session)
+            run_repo_init = self._run_repo_factory(session)
             results = await run_repo_init.get_results(running.model_run_id)
 
         if results is None:
@@ -273,16 +287,20 @@ class NarrativeService:
 
         # Sort by total_rank ASC, take top_n entries.
         # Bug 1 fix: RankingRunService stores ticker/total_rank/etc. — no stock_id.
-        # Resolve each ticker to its stock_id via get_by_ticker using a dedicated session.
+        # Resolve tickers to stock_ids via Bulk-Query (1 Roundtrip statt N).
         sorted_results = sorted(results, key=lambda r: int(r["total_rank"]))
         top_stocks = sorted_results[: running.top_n]
+        top_tickers = [row["ticker"] for row in top_stocks]
+
+        async with self._session_factory() as lookup_session:
+            lookup_stock_repo = self._stock_repo_factory(lookup_session)
+            stocks_by_ticker = {
+                s.ticker: s for s in await lookup_stock_repo.list_by_tickers(top_tickers)
+            }
 
         stock_ids: list[UUID] = []
-        for row in top_stocks:
-            ticker = row["ticker"]
-            async with self._session_factory() as lookup_session:
-                lookup_stock_repo = SQLAStockRepository(session=lookup_session)
-                stock = await lookup_stock_repo.get_by_ticker(ticker)
+        for ticker in top_tickers:
+            stock = stocks_by_ticker.get(ticker)
             if stock is None:
                 self._logger.warning(
                     "Batch %s: ticker %s not found in DB, skipping",
@@ -301,11 +319,17 @@ class NarrativeService:
         # Concurrency-Limit
         semaphore = asyncio.Semaphore(self._max_concurrent_batch_workers)
 
-        async def _one(stock_id: UUID) -> tuple[str, UUID]:
+        async def _one(stock_id: UUID) -> tuple[str, UUID, str | None]:
+            """Liefert (status, stock_id, error_reason).
+
+            error_reason wird nur bei BudgetCapExceeded gesetzt (Spec §8 verlangt
+            "Budget-Cap erreicht" als job.error_message). Network-Fails liefern
+            None — failed_stock_ids reicht zur Diagnose.
+            """
             async with semaphore, self._session_factory() as worker_session:
-                # Eigene Session pro Worker (B1-Lehre)
-                isolated_stock_repo = SQLAStockRepository(session=worker_session)
-                isolated_run_repo = SQLARankingRunRepository(session=worker_session)
+                # Factory pro Worker — eigene Session (B1-Lehre).
+                isolated_stock_repo = self._stock_repo_factory(worker_session)
+                isolated_run_repo = self._run_repo_factory(worker_session)
                 try:
                     await self._generate_memo_isolated(
                         stock_id,
@@ -314,12 +338,19 @@ class NarrativeService:
                         stock_repo=isolated_stock_repo,
                         run_repo=isolated_run_repo,
                     )
-                    return ("ok", stock_id)
+                    return ("ok", stock_id, None)
+                except BudgetCapExceeded as exc:
+                    self._logger.warning(
+                        "Batch %s memo failed for stock %s: BudgetCapExceeded %s",
+                        job_id,
+                        stock_id,
+                        exc,
+                    )
+                    return ("failed", stock_id, "Budget-Cap erreicht")
                 except (
                     anthropic.APITimeoutError,
                     anthropic.APIConnectionError,
                     anthropic.RateLimitError,
-                    BudgetCapExceeded,
                 ) as exc:
                     self._logger.warning(
                         "Batch %s memo failed for stock %s: %s",
@@ -327,10 +358,11 @@ class NarrativeService:
                         stock_id,
                         exc,
                     )
-                    return ("failed", stock_id)
+                    return ("failed", stock_id, None)
 
         results_per_stock = await asyncio.gather(*[_one(s) for s in stock_ids])
-        failed_ids = [s for status, s in results_per_stock if status == "failed"]
+        failed_ids = [sid for status, sid, _ in results_per_stock if status == "failed"]
+        budget_reasons = [r for status, _, r in results_per_stock if status == "failed" and r]
 
         n_failed = len(failed_ids)
         if n_failed == 0:
@@ -348,10 +380,29 @@ class NarrativeService:
             n_failed,
         )
 
+        # W1 Race-Fix: Vor dem Final-Save pruefen ob ein Stale-Cleanup (in
+        # get_batch_job) den Job zwischenzeitlich auf 'failed' gesetzt hat.
+        # Falls ja: NICHT ueberschreiben — User wuerde sonst kurzzeitig
+        # 'failed' sehen und spaeter 'complete' (last-write-wins-Race).
+        current = await self._batch_repo.get(job_id)
+        if current is not None and current.status == "failed" and current.started_at is not None:
+            elapsed = (datetime.now(tz=UTC) - current.started_at).total_seconds()
+            if elapsed > self._stale_batch_timeout_seconds:
+                self._logger.info(
+                    "Batch %s stale-cleanup intervened during run; preserving failed status",
+                    job_id,
+                )
+                return
+
+        # error_message: erstes Budget-Cap-Vorkommnis spiegelt sich im Job.
+        # Spec §8: bei BudgetCapExceeded mid-batch -> error_message="Budget-Cap erreicht".
+        error_message = budget_reasons[0] if budget_reasons else None
+
         final = running.model_copy(
             update={
                 "status": final_status,
                 "failed_stock_ids": failed_ids,
+                "error_message": error_message,
                 "completed_at": datetime.now(tz=UTC),
             }
         )
@@ -396,16 +447,20 @@ class NarrativeService:
     async def get_stock_ticker_map(self, stock_ids: list[UUID]) -> dict[UUID, str]:
         """Lookup-Map stock_id -> ticker, fuer GET /jobs/{id}-Response.
 
-        N+1-Query (1 stock_repo.get pro stock_id). Akzeptabel weil top_n <= 100,
-        aber in einem Folge-PR koennte das durch list_by_ids-Bulk-Query ersetzt
-        werden falls Performance-Druck entsteht.
+        Bulk-Query via `list_by_ids` (1 Roundtrip). Wichtig fuer Frontend-Polling
+        alle 2-3s bei top_n bis 100: vermeidet N+1-Last.
+
+        Nutzt Factory + frische Session statt self._stock_repo: GET /jobs/{id}
+        kann lange nach Request-Ende aufgerufen werden (Polling), und Background-
+        Worker-Setup (PR #70 W4) soll konsistent von Request-Session entkoppelt
+        sein.
         """
-        out: dict[UUID, str] = {}
-        for sid in stock_ids:
-            stock = await self._stock_repo.get(sid)
-            if stock is not None:
-                out[sid] = stock.ticker
-        return out
+        if not stock_ids:
+            return {}
+        async with self._session_factory() as session:
+            repo = self._stock_repo_factory(session)
+            stocks = await repo.list_by_ids(stock_ids)
+        return {s.id: s.ticker for s in stocks}
 
     async def _generate_memo_isolated(
         self,

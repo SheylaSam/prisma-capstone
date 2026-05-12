@@ -49,11 +49,15 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.CheckConstraint("top_n BETWEEN 1 AND 100", name="ck_memo_batch_jobs_top_n"),
-        sa.CheckConstraint("language IN ('de', 'en')", name="ck_memo_batch_jobs_language"),
+        # Constraint-Namen ohne Tabellen-Praefix: Base.metadata NAMING_CONVENTION
+        # `ck_%(table_name)s_%(constraint_name)s` setzt den Praefix automatisch.
+        # Explizites Praefix wuerde zu `ck_memo_batch_jobs_ck_memo_batch_jobs_*`
+        # in der DB fuehren (siehe Lehre aus PR #54 build-step 5).
+        sa.CheckConstraint("top_n BETWEEN 1 AND 100", name="top_n"),
+        sa.CheckConstraint("language IN ('de', 'en')", name="language"),
         sa.CheckConstraint(
             "status IN ('pending', 'running', 'complete', 'partial', 'failed')",
-            name="ck_memo_batch_jobs_status",
+            name="status",
         ),
     )
     op.create_index(

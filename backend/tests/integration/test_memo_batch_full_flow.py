@@ -12,9 +12,9 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 import pytest_asyncio
-from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -176,6 +176,10 @@ async def test_batch_top_n_full_flow(
         repository=SQLACostLogRepository(session_factory),
         cap_usd=Decimal("50"),
     )
+    # Request-scoped run/stock-Repos sind hier Stubs (__new__) — start_batch
+    # nutzt die Factory + session_factory fuer Run-Validation; Worker macht
+    # eigene Sessions ueber die Factories. Damit ist der Service Background-
+    # tauglich auch ohne lebende Request-Session.
     service = NarrativeService(
         memo_repository=SQLAResearchMemoRepository(session_factory),
         run_repository=SQLARankingRunRepository.__new__(SQLARankingRunRepository),
@@ -185,14 +189,21 @@ async def test_batch_top_n_full_flow(
         prompt_loader=PromptTemplateLoader(),
         cost_tracker=cost_tracker,
         session_factory=session_factory,
+        # Factories fuer Background-Worker-Repos (PR #70 W4 — Hexagonal).
+        stock_repo_factory=lambda s: SQLAStockRepository(session=s),
+        run_repo_factory=lambda s: SQLARankingRunRepository(session=s),
     )
 
     app = create_app()
     app.dependency_overrides[get_narrative_service] = lambda: service
 
-    with TestClient(app) as client:
+    # AsyncClient statt TestClient: vermeidet anyio-Thread-Hopping, das mit
+    # async session_factory + asyncio.gather in _execute_batch zu Event-Loop-
+    # Mismatch fuehren wuerde ("Future attached to a different loop").
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         # POST /batch
-        resp = client.post(
+        resp = await client.post(
             "/api/v1/memos/batch",
             json={
                 "model_run_id": str(ctx.run_id),
@@ -207,7 +218,7 @@ async def test_batch_top_n_full_flow(
         body = None
         for _ in range(30):
             await asyncio.sleep(1)
-            poll = client.get(f"/api/v1/memos/jobs/{job_id}")
+            poll = await client.get(f"/api/v1/memos/jobs/{job_id}")
             assert poll.status_code == 200
             body = poll.json()
             if body["status"] in ("complete", "partial", "failed"):

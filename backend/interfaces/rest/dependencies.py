@@ -213,6 +213,10 @@ async def get_narrative_service(
         prompt_loader=prompt_loader,
         cost_tracker=cost_tracker,
         session_factory=get_session_factory(),
+        # Factories fuer Background-Worker-Repos: keine konkreten Infrastructure-
+        # Klassen im Application-Layer (Hexagonal — PR #70 W4-Fix).
+        stock_repo_factory=lambda s: SQLAStockRepository(session=s),
+        run_repo_factory=lambda s: SQLARankingRunRepository(session=s),
         max_concurrent_batch_workers=settings.max_concurrent_batch_workers,
         stale_batch_timeout_seconds=settings.stale_batch_timeout_seconds,
     )
