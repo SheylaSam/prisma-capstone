@@ -4,7 +4,7 @@
 
 **Goal:** pgvector-Persistence-Schicht — Migration + Domain-Entities + Repository-Port + SQLA-Adapter + Tests. Kein Ingestion, kein Retrieval, kein Voyage-Call.
 
-**Architektur:** Hexagonal — `Document` und `EmbeddingChunk` Domain-Entities (frozen=True), `EmbeddingRepository`-Port in Domain, `SQLAEmbeddingRepository`-Adapter in Infrastructure. Migration aktiviert pgvector-Extension und legt Tabellen + IVFFlat-Index an.
+**Architektur:** Hexagonal — `Document` und `EmbeddingChunk` Domain-Entities (frozen=True), `EmbeddingRepository`-Port in Domain, `SQLAEmbeddingRepository`-Adapter in Infrastructure. Migration aktiviert pgvector-Extension und legt Tabellen plus HNSW-Index (halfvec-Cast) an.
 
 **Tech Stack:** SQLAlchemy 2.0 (Mapped/mapped_column), Alembic, pgvector Python-Lib (>=0.3), pytest + pytest-asyncio.
 
@@ -25,7 +25,7 @@
 | `backend/domain/entities/document.py` | CREATE | `Document` frozen-dataclass |
 | `backend/domain/entities/embedding_chunk.py` | CREATE | `EmbeddingChunk` frozen-dataclass |
 | `backend/domain/repositories/embedding_repository.py` | CREATE | `EmbeddingRepository` ABC + `DuplicateUrl` Exception |
-| `backend/alembic/versions/0008_enable_pgvector_and_create_embeddings.py` | CREATE | pgvector-Extension + 2 Tabellen + IVFFlat-Index |
+| `backend/alembic/versions/0008_enable_pgvector_and_create_embeddings.py` | CREATE | pgvector-Extension + 2 Tabellen + HNSW-Index mit halfvec-Cast |
 | `backend/infrastructure/persistence/models/embedding.py` | CREATE | `DocumentORM` + `EmbeddingChunkORM` (SQLA-Mapped) |
 | `backend/infrastructure/persistence/repositories/embedding_repository.py` | CREATE | `SQLAEmbeddingRepository`-Adapter |
 | `backend/tests/unit/domain/entities/test_document.py` | CREATE | Entity-Validation |
@@ -491,14 +491,20 @@ def upgrade() -> None:
         sa.UniqueConstraint("document_id", "chunk_idx", name="uq_doc_chunk_idx"),
     )
 
-    # IVFFlat-Index fuer Cosine-Similarity. lists=100 ist Heuristik fuer
-    # ~4000 Chunks (sqrt(n)). In Slice 1 ist die Tabelle leer; Index
-    # funktioniert trotzdem (Postgres faellt auf seq-scan zurueck bis
-    # genuegend Daten fuer Training da sind).
+    # HNSW-Index mit halfvec-Cast fuer Cosine-Similarity. pgvector limitiert
+    # `vector`-Typ auf 2000 dim fuer Indexierung; wir nutzen 2048 (voyage-
+    # 3-large per ADR-0004). Loesung: Application-Column bleibt
+    # `vector(2048)` (volle Praezision), Index nutzt `halfvec(2048)`-Cast
+    # (16-bit floats, Index-Limit 4000 dim). Recall-Verlust durch
+    # Half-Precision-Quantisierung ist marginal (~0.1% laut pgvector-
+    # Benchmarks) und industry-standard. m=16/ef_construction=64 sind
+    # pgvector-Defaults und passen fuer ~4000-100k Chunks ohne Tuning.
+    # In Slice 1 ist die Tabelle leer; Index funktioniert trotzdem.
     op.execute(
         "CREATE INDEX ix_embedding_chunks_embedding "
-        "ON embedding_chunks USING ivfflat (embedding vector_cosine_ops) "
-        "WITH (lists = 100)"
+        "ON embedding_chunks USING hnsw "
+        "((embedding::halfvec(2048)) halfvec_cosine_ops) "
+        "WITH (m = 16, ef_construction = 64)"
     )
 
 
@@ -532,7 +538,7 @@ docker compose exec db psql -U prisma -d prisma -c "\d embedding_chunks"
 docker compose exec db psql -U prisma -d prisma -c "SELECT indexname FROM pg_indexes WHERE tablename='embedding_chunks';"
 ```
 
-Expected: Index `ix_embedding_chunks_embedding` mit `ivfflat` Spalte.
+Expected: Index `ix_embedding_chunks_embedding` mit `hnsw`-Methode und `halfvec_cosine_ops`-Operator-Class.
 
 - [ ] **Step 5.4: Migration down testen**
 

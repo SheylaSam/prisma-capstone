@@ -48,7 +48,7 @@ backend/alembic/versions/
     - CREATE EXTENSION IF NOT EXISTS vector
     - documents-Tabelle
     - embedding_chunks-Tabelle mit vector(2048)
-    - Index auf embedding_chunks.embedding (IVFFlat)
+    - Index auf embedding_chunks.embedding (HNSW mit halfvec-Cast, weil pgvector den `vector`-Typ auf 2000 dim fuer Indexierung limitiert, wir aber 2048 dim brauchen)
 
 backend/domain/entities/
 ├── document.py                                       (NEU)
@@ -123,8 +123,9 @@ Port nutzt. Slice 3 added `RetrievalService` + REST.
 
 **Indizes:**
 - `(document_id, chunk_idx)` UNIQUE — keine Duplikate
-- IVFFlat-Index auf `embedding` mit `vector_cosine_ops` (cosine-Distanz, ADR-0004 implizit)
-  - Index-Lists: 100 (typischer Wert fuer 4000-Chunks-Corpus)
+- HNSW-Index auf `(embedding::halfvec(2048))` mit `halfvec_cosine_ops` (cosine-Distanz, ADR-0004 implizit)
+  - Halfvec-Cast noetig, weil pgvector-Index-Limit fuer `vector` 2000 dim ist; `halfvec` erlaubt bis 4000 dim. Application-Column bleibt `vector(2048)` (volle Praezision), Index nutzt 16-bit-Floats. Recall-Verlust durch Half-Precision-Quantisierung ist marginal (~0.1% laut pgvector-Benchmarks) und industry-standard fuer Embeddings >1024 dim.
+  - HNSW-Parameter: `m=16`, `ef_construction=64` (pgvector-Defaults, passen fuer 4000-100k Chunks ohne Tuning).
 
 ### 4.3 Domain-Entities
 
@@ -239,11 +240,16 @@ def upgrade() -> None:
         sa.Column("metadata", sa.dialects.postgresql.JSONB(), nullable=True),
         sa.UniqueConstraint("document_id", "chunk_idx", name="uq_doc_chunk_idx"),
     )
-    # IVFFlat-Index fuer Cosine-Similarity. Lists=100 ist Heuristik fuer ~4000 Chunks
-    # (sqrt(n)). Postgres-pgvector-Doc empfiehlt sqrt(rows) als Startwert.
+    # HNSW-Index mit halfvec-Cast fuer Cosine-Similarity. pgvector limitiert
+    # `vector` auf 2000 dim fuer Indexierung; wir nutzen 2048 (voyage-3-large
+    # per ADR-0004). `halfvec` erlaubt bis 4000 dim — Application-Column bleibt
+    # vector(2048), Index nutzt 16-bit-Floats. m=16/ef_construction=64 sind
+    # pgvector-Defaults und passen fuer ~4000-100k Chunks ohne Tuning.
     op.execute(
         "CREATE INDEX ix_embedding_chunks_embedding "
-        "ON embedding_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
+        "ON embedding_chunks USING hnsw "
+        "((embedding::halfvec(2048)) halfvec_cosine_ops) "
+        "WITH (m = 16, ef_construction = 64)"
     )
 
 
@@ -284,7 +290,7 @@ muss real verifiziert werden.
 - [ ] `pgvector>=0.3` in pyproject.toml
 - [ ] Migration `0008_enable_pgvector_and_create_embeddings.py` laeuft up und down ohne Errors
 - [ ] `documents`- und `embedding_chunks`-Tabellen existieren mit korrekten Constraints
-- [ ] IVFFlat-Index ist angelegt und nutzbar (manueller Check via psql `\d embedding_chunks`)
+- [ ] HNSW-Index mit halfvec-Cast ist angelegt und nutzbar (manueller Check via psql `\d embedding_chunks`)
 - [ ] `Document`- und `EmbeddingChunk`-Domain-Entities frozen + typed
 - [ ] `EmbeddingRepository`-Port + `SQLAEmbeddingRepository`-Adapter implementiert
 - [ ] Unit-Tests fuer Entities gruen
@@ -300,7 +306,7 @@ muss real verifiziert werden.
 | pgvector auf Render nicht aktiviert (DB pre-2026-02-05) | niedrig (PRISMA gestartet FS 2026) | Migration faellt mit klarer Error-Msg, Support-Ticket-Pfad dokumentiert |
 | `pgvector.sqlalchemy.Vector`-Type bricht mit current SQLA 2.0 | niedrig | pgvector-Lib ist SQLA-2.0-kompatibel seit 0.2; pyproject pinnt >=0.3 |
 | `embedding`-Type-Mapping zwischen Domain (list[float]) und pgvector | niedrig | pgvector-Lib reicht list[float] direkt durch — kein Conversion-Code |
-| IVFFlat-Index braucht Daten zum Trainieren | hoch (Slice 1 hat keine Daten) | Index ist erstellt aber leer — wird in Slice 2 nach Ingestion automatisch verwendet. Cosine-Suche faellt waehrenddessen auf seq-scan zurueck (OK fuer leeren Corpus). |
+| HNSW-Index braucht keine Trainings-Daten (im Gegensatz zu IVFFlat), aber bei leerer Tabelle in Slice 1 ohnehin irrelevant | niedrig | Index ist erstellt aber leer — wird in Slice 2 nach Ingestion automatisch verwendet. Cosine-Suche faellt waehrenddessen auf seq-scan zurueck (OK fuer leeren Corpus). |
 | Test-DB hat kein pgvector | mittel | docker-compose fuer Tests muss `pgvector/pgvector:pg16` Image nutzen, nicht plain postgres |
 
 ## 10. Q-by-Q-Decisions (Audit-Trail)
@@ -309,7 +315,7 @@ muss real verifiziert werden.
 |---|---|---|---|
 | 1 | Slice-Groesse? | Option A: Foundation only (Schema + Repository, kein Ingestion/Retrieval) | 2026-05-11 |
 | 2 | pgvector-Verfuegbarkeit auf Render verifiziert? | ✅ ja, via Render-Docs — DBs nach 2026-02-05 automatisch | 2026-05-11 |
-| 3 | IVFFlat-Index in Slice 1 oder erst nach Ingestion? | In Slice 1 anlegen — leerer Index ist OK, spaete Index-Creation oft langsamer | 2026-05-11 |
+| 3 | Index in Slice 1 oder erst nach Ingestion? | In Slice 1 anlegen — leerer Index ist OK, spaete Index-Creation oft langsamer. Index-Typ HNSW mit halfvec-Cast (siehe §4.2), nicht IVFFlat wie urspruenglich geplant — 2048-dim sprengt das `vector`-Index-Limit von 2000 dim. | 2026-05-11 |
 | 4 | Embedding-Dimension fest auf 2048 oder configurable? | Fest 2048 (ADR-0004 §4 — voyage-3-large) — config-Pfad ist Stretch | 2026-05-11 |
 | 5 | InMemory-Repository fuer Tests? | Nein — pgvector-Verhalten muss real verifiziert werden, nutzen wir wo Tests bereits real PG nutzen (siehe `test_research_memo_repository.py`-Pattern) | 2026-05-11 |
 
