@@ -384,6 +384,66 @@ class TestExecuteBatch:
         assert stock_ids[0] not in last_job.failed_stock_ids
 
 
+class TestExecuteBatchTickerLookup:
+    """Verifiziert dass `list_by_tickers` Bulk-Lookup (PR #70 W5) Stocks die
+    nicht in der DB sind sauber skippt, statt zu crashen oder den ganzen Batch
+    zu killen.
+    """
+
+    async def test_missing_tickers_are_skipped_with_warning(self) -> None:
+        """Ein Ticker im Run aber nicht in stocks-Tabelle: Logged Warning,
+        andere Stocks laufen weiter."""
+        from backend.domain.entities.memo_batch_job import MemoBatchJob
+
+        run_id = uuid4()
+        job_id = uuid4()
+        # 3 Tickers im Run, aber nur 2 sind in der "DB" (Stock C fehlt).
+        stock_ids = [uuid4(), uuid4()]
+
+        existing_job = MemoBatchJob(
+            id=job_id,
+            model_run_id=run_id,
+            top_n=3,
+            language="de",
+            status="pending",
+            failed_stock_ids=[],
+            error_message=None,
+            created_at=datetime.now(UTC),
+        )
+        batch_repo = AsyncMock()
+        batch_repo.get = AsyncMock(return_value=existing_job)
+        batch_repo.save = AsyncMock()
+
+        session_factory, run_repo_factory, stock_repo_factory, _, _ = _make_batch_exec_mocks(
+            run_results=[
+                {"ticker": "A", "total_rank": 1},
+                {"ticker": "B", "total_rank": 2},
+                {"ticker": "C", "total_rank": 3},  # nicht in stocks-Tabelle
+            ],
+            # list_by_tickers gibt nur A + B zurueck (C wurde aus DB geloescht)
+            stocks=[(stock_ids[0], "A"), (stock_ids[1], "B")],
+        )
+
+        service = _make_service(
+            batch_repository=batch_repo,
+            session_factory=session_factory,
+            run_repo_factory=run_repo_factory,
+            stock_repo_factory=stock_repo_factory,
+        )
+        service._generate_memo_isolated = AsyncMock()  # type: ignore[method-assign]
+
+        await service._execute_batch(job_id)
+
+        # Worker beendet sauber mit status=complete fuer die 2 gefundenen
+        # Stocks; C wird stillschweigend uebersprungen (Warning im Log,
+        # nicht in failed_stock_ids — failed_stock_ids ist fuer LLM-Fails).
+        last_job: MemoBatchJob = batch_repo.save.await_args_list[-1].args[0]
+        assert last_job.status == "complete"
+        assert last_job.failed_stock_ids == []
+        # _generate_memo_isolated wurde nur 2x gerufen (nicht 3x)
+        assert service._generate_memo_isolated.await_count == 2
+
+
 class TestExecuteBatchStaleCleanupRace:
     """W1 (PR #70): Wenn waehrend des Workers ein Stale-Cleanup intervenierte,
     darf der Worker den Final-Save NICHT mehr durchfuehren.
