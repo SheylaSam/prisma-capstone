@@ -230,6 +230,8 @@ async def test_full_pipeline_en(
             prompt_loader=PromptTemplateLoader(),
             cost_tracker=cost_tracker,
             session_factory=session_factory,
+            stock_repo_factory=lambda s: SQLAStockRepository(session=s),
+            run_repo_factory=lambda s: SQLARankingRunRepository(session=s),
         )
 
         memo = await service.generate_memo(ids["stock_id"], ids["run_id"], language="en")
