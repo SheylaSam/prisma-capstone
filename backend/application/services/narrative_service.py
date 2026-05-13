@@ -257,6 +257,35 @@ class NarrativeService:
         die laengst geschlossen ist). Stattdessen baut er pro parallelem
         Sub-Task eigene Sessions via session_factory (B1-Lehre).
         """
+        # F2: Outer try/except stellt sicher dass der Job nie auf 'running' hängen
+        # bleibt wenn der Worker unerwartet crasht (z.B. DB-Verbindungsverlust,
+        # ImportError, unerwartete RuntimeError ausserhalb von _one()).
+        # _one() hat bereits einen eigenen Catch-all — dieser hier fängt alles andere.
+        try:
+            await self._execute_batch_inner(job_id)
+        except Exception as exc:
+            self._logger.exception("Batch %s: worker crashed unexpectedly: %s", job_id, exc)
+            try:
+                crashed = await self._batch_repo.get(job_id)
+                if crashed is not None and crashed.status == "running":
+                    await self._batch_repo.save(
+                        crashed.model_copy(
+                            update={
+                                "status": "failed",
+                                "completed_at": datetime.now(tz=UTC),
+                                "error_message": (
+                                    f"Worker crash: {type(exc).__name__}: {exc}"
+                                )[:1000],
+                            }
+                        )
+                    )
+            except Exception:
+                self._logger.exception(
+                    "Batch %s: failed to persist crash status — job may stay 'running'", job_id
+                )
+
+    async def _execute_batch_inner(self, job_id: UUID) -> None:
+        """Innerer Worker-Body — aufgerufen von _execute_batch mit Crash-Guard."""
         # _batch_repo is SQLAMemoBatchJobRepository which opens its own session per
         # call — safe to use from background worker (unlike stock/run repos which
         # would share the closed request session).
@@ -354,6 +383,17 @@ class NarrativeService:
                 ) as exc:
                     self._logger.warning(
                         "Batch %s memo failed for stock %s: %s",
+                        job_id,
+                        stock_id,
+                        exc,
+                    )
+                    return ("failed", stock_id, None)
+                except Exception as exc:
+                    # F2: Catch-all fuer unerwartete Exceptions (z.B. anthropic.APIStatusError,
+                    # ValidationError, DB-Fehler). Verhindert dass ein einzelner Stock-Fehler
+                    # asyncio.gather() crasht und den gesamten Worker abbricht.
+                    self._logger.exception(
+                        "Batch %s: unexpected error for stock %s: %s",
                         job_id,
                         stock_id,
                         exc,

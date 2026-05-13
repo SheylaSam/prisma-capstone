@@ -913,3 +913,116 @@ class TestBug3BudgetCapExceededCaught:
         assert stock_ids[0] not in last_job.failed_stock_ids
         # W3: error_message propagiert "Budget-Cap erreicht"
         assert last_job.error_message == "Budget-Cap erreicht"
+
+
+class TestExecuteBatchCrashGuard:
+    """F2: Outer try/except in _execute_batch verhindert dass der Job auf 'running' hängt."""
+
+    async def test_unexpected_exception_in_batch_sets_job_failed(self) -> None:
+        """F2: Wenn _execute_batch_inner eine RuntimeError wirft (z.B. DB-Verbindungsverlust),
+        muss der Job als 'failed' persistiert werden — nicht auf 'running' hängen bleiben."""
+        from backend.domain.entities.memo_batch_job import MemoBatchJob
+
+        job_id = uuid4()
+        run_id = uuid4()
+        pending_job = MemoBatchJob(
+            id=job_id,
+            model_run_id=run_id,
+            top_n=1,
+            language="de",
+            status="pending",
+            failed_stock_ids=[],
+            error_message=None,
+            created_at=datetime.now(UTC),
+        )
+        running_job = pending_job.model_copy(
+            update={"status": "running", "started_at": datetime.now(UTC)}
+        )
+
+        batch_repo = AsyncMock()
+        # _execute_batch liest den Job zum Crash-Status-Setzen
+        batch_repo.get = AsyncMock(return_value=running_job)
+        batch_repo.save = AsyncMock()
+
+        service = _make_service(batch_repository=batch_repo)
+
+        # _execute_batch_inner wirft RuntimeError (simuliert DB-Crash)
+        service._execute_batch_inner = AsyncMock(  # type: ignore[method-assign]
+            side_effect=RuntimeError("DB connection lost unexpectedly")
+        )
+
+        await service._execute_batch(job_id)
+
+        # Job muss als 'failed' persistiert worden sein
+        assert batch_repo.save.await_count >= 1
+        final_save: MemoBatchJob = batch_repo.save.await_args_list[-1].args[0]
+        assert final_save.status == "failed"
+        assert final_save.completed_at is not None
+        assert final_save.error_message is not None
+        assert "RuntimeError" in final_save.error_message or "crash" in final_save.error_message.lower()
+
+    async def test_unexpected_exception_in_one_does_not_crash_worker(self) -> None:
+        """F2: Catch-all in _one() verhindert dass ein einzelner Stock-Fehler
+        asyncio.gather() crasht und den gesamten Batch abbricht."""
+        from backend.domain.entities.memo_batch_job import MemoBatchJob
+
+        stock_id_1 = uuid4()
+        stock_id_2 = uuid4()
+        job_id = uuid4()
+        run_id = uuid4()
+
+        session_factory, run_repo_factory, stock_repo_factory, _, _ = _make_batch_exec_mocks(
+            run_results=[
+                {"ticker": "AAPL", "total_rank": 1},
+                {"ticker": "MSFT", "total_rank": 2},
+            ],
+            stocks=[(stock_id_1, "AAPL"), (stock_id_2, "MSFT")],
+        )
+
+        pending_job = MemoBatchJob(
+            id=job_id,
+            model_run_id=run_id,
+            top_n=2,
+            language="de",
+            status="pending",
+            failed_stock_ids=[],
+            error_message=None,
+            created_at=datetime.now(UTC),
+        )
+        running_job = pending_job.model_copy(
+            update={"status": "running", "started_at": datetime.now(UTC)}
+        )
+
+        batch_repo = AsyncMock()
+        batch_repo.get = AsyncMock(side_effect=[pending_job, running_job])
+        batch_repo.save = AsyncMock()
+
+        service = _make_service(
+            batch_repository=batch_repo,
+            session_factory=session_factory,
+            run_repo_factory=run_repo_factory,
+            stock_repo_factory=stock_repo_factory,
+        )
+
+        # Erster Stock: unerwartete Exception (z.B. RuntimeError)
+        # Zweiter Stock: ok
+        call_count = 0
+
+        async def _side_effect(stock_id: Any, *_args: Any, **_kwargs: Any) -> None:
+            nonlocal call_count
+            call_count += 1
+            if stock_id == stock_id_1:
+                raise RuntimeError("Unexpected internal error")
+
+        service._generate_memo_isolated = AsyncMock(side_effect=_side_effect)  # type: ignore[method-assign]
+
+        # Darf NICHT crashen
+        await service._execute_batch(job_id)
+
+        # Beide Stocks wurden versucht (kein vorzeitiger Abbruch)
+        assert call_count == 2
+
+        # Job ist partial (1 ok, 1 failed) — nicht 'running' geblieben
+        last_save: MemoBatchJob = batch_repo.save.await_args_list[-1].args[0]
+        assert last_save.status in ("partial", "failed")
+        assert stock_id_1 in last_save.failed_stock_ids
