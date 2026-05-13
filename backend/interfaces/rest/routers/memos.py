@@ -18,7 +18,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from backend.application.services.narrative_service import NarrativeService
-from backend.domain.entities.research_memo import ContradictionItem, ResearchMemo
+from backend.domain.entities.research_memo import (
+    ERROR_FALLBACK_MODEL_VERSION,
+    ContradictionItem,
+    ResearchMemo,
+)
 from backend.interfaces.rest.dependencies import get_narrative_service
 from backend.interfaces.rest.schemas.memo_batch import (
     BatchJobAcceptedResponse,
@@ -56,7 +60,7 @@ class MemoResponse(BaseModel):
 
     @classmethod
     def from_entity(cls, memo: ResearchMemo) -> "MemoResponse":
-        is_error = memo.model_version == "error-fallback" or memo.one_liner.startswith(
+        is_error = memo.model_version == ERROR_FALLBACK_MODEL_VERSION or memo.one_liner.startswith(
             "Memo-Generierung fehlgeschlagen"
         )
         return cls(
@@ -170,7 +174,7 @@ async def get_job(
             stock_id=m.stock_id,
             ticker=ticker_map.get(m.stock_id),  # None falls Stock geloescht (CASCADE-edge)
             one_liner=m.one_liner,
-            is_error=(m.model_version == "error-fallback"),
+            is_error=(m.model_version == ERROR_FALLBACK_MODEL_VERSION),
         )
         for m in memos
     ]

@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.application.services.cost_tracker import CostTracker
 from backend.domain.entities.memo_batch_job import MemoBatchJob
-from backend.domain.entities.research_memo import ResearchMemo
+from backend.domain.entities.research_memo import ERROR_FALLBACK_MODEL_VERSION, ResearchMemo
 from backend.domain.entities.stock import Stock
 from backend.domain.errors import BudgetCapExceeded
 from backend.domain.repositories.memo_batch_job_repository import MemoBatchJobRepository
@@ -699,5 +699,5 @@ class NarrativeService:
             key_risks=["—"],
             confidence="low",
             generated_at=datetime.now(tz=UTC),
-            model_version="error-fallback",
+            model_version=ERROR_FALLBACK_MODEL_VERSION,
         )
