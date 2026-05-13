@@ -90,7 +90,10 @@ class SQLAResearchMemoRepository(ResearchMemoRepository):
                 select(ResearchMemoORM)
                 .where(ResearchMemoORM.model_run_id == model_run_id)
                 .where(ResearchMemoORM.language == language)
-                .order_by(ResearchMemoORM.created_at.asc())
+                # F6: Sekundär-Sort nach id für Determinismus bei gleicher created_at.
+                # Möglich bei Parallel-Batch-Inserts mit Semaphore(3): mehrere Memos
+                # können denselben Timestamp bekommen → ohne id-Sort non-deterministisch.
+                .order_by(ResearchMemoORM.created_at.asc(), ResearchMemoORM.id.asc())
             )
             rows = result.scalars().all()
             return [_orm_to_entity(row) for row in rows]
