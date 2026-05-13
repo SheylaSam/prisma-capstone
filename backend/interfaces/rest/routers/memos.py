@@ -175,6 +175,13 @@ async def get_job(
         for m in memos
     ]
 
+    # F1: Für terminale Jobs (complete/partial/failed) ist completed = top_n - failed,
+    # da die DB-Records die definitive Wahrheit sind (job.failed_stock_ids ist final).
+    # Während running/pending wird len(memos) als Live-Progress-Indikator verwendet —
+    # zeigt wieviele Memos schon persistiert wurden, unabhängig ob von diesem Batch.
+    _terminal = job.status in ("complete", "partial", "failed")
+    _completed = job.top_n - len(job.failed_stock_ids) if _terminal else len(memos)
+
     return BatchJobResponse(
         job_id=job.id,
         model_run_id=job.model_run_id,
@@ -186,7 +193,7 @@ async def get_job(
         completed_at=job.completed_at,
         progress=BatchProgress(
             expected=job.top_n,
-            completed=len(memos),
+            completed=_completed,
             failed=len(job.failed_stock_ids),
         ),
         failed_stock_ids=job.failed_stock_ids,

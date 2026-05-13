@@ -153,3 +153,107 @@ def test_get_job_returns_status_and_progress(app_with_mock_service: Any) -> None
     assert body["progress"]["expected"] == 20
     assert body["progress"]["completed"] == 0
     assert body["progress"]["failed"] == 0
+
+
+def test_get_job_progress_excludes_preexisting_memos(app_with_mock_service: Any) -> None:
+    """F1: progress.completed darf nicht durch Memos aus früheren Batches aufgebläht werden.
+
+    Szenario: Job top_n=3, status=complete, failed=0.
+    list_memos_for_run liefert 5 Memos (2 aus einem vorherigen Single-Memo-Call).
+    Erwartet: completed=3 (= top_n - failed), nicht 5.
+    """
+    app, service = app_with_mock_service
+    run_id = uuid4()
+    job = MemoBatchJob(
+        id=uuid4(),
+        model_run_id=run_id,
+        top_n=3,
+        language="de",
+        status="complete",
+        failed_stock_ids=[],
+        error_message=None,
+        created_at=datetime.now(UTC),
+        started_at=datetime.now(UTC),
+        completed_at=datetime.now(UTC),
+    )
+    service.get_batch_job = AsyncMock(return_value=job)
+    # 5 Memos — 2 davon aus früheren Single-Memo-Calls (nicht von diesem Batch)
+    mock_memos = [
+        AsyncMock(stock_id=uuid4(), one_liner=f"memo {i}", model_version="claude-sonnet-4-6")
+        for i in range(5)
+    ]
+    service.list_memos_for_run = AsyncMock(return_value=mock_memos)
+    service.get_stock_ticker_map = AsyncMock(return_value={})
+
+    with TestClient(app) as client:
+        resp = client.get(f"/api/v1/memos/jobs/{job.id}")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    # completed muss 3 sein (top_n=3 - failed=0), nicht 5
+    assert body["progress"]["completed"] == 3
+    assert body["progress"]["expected"] == 3
+    assert body["progress"]["failed"] == 0
+
+
+def test_get_job_progress_running_uses_live_memo_count(app_with_mock_service: Any) -> None:
+    """F1: Während running zeigt completed=len(memos) als Live-Progress-Indikator."""
+    app, service = app_with_mock_service
+    job = MemoBatchJob(
+        id=uuid4(),
+        model_run_id=uuid4(),
+        top_n=10,
+        language="de",
+        status="running",
+        failed_stock_ids=[],
+        error_message=None,
+        created_at=datetime.now(UTC),
+        started_at=datetime.now(UTC),
+    )
+    service.get_batch_job = AsyncMock(return_value=job)
+    live_memos = [
+        AsyncMock(stock_id=uuid4(), one_liner=f"memo {i}", model_version="claude-sonnet-4-6")
+        for i in range(4)
+    ]
+    service.list_memos_for_run = AsyncMock(return_value=live_memos)
+    service.get_stock_ticker_map = AsyncMock(return_value={})
+
+    with TestClient(app) as client:
+        resp = client.get(f"/api/v1/memos/jobs/{job.id}")
+
+    assert resp.status_code == 200
+    # Live-Count während running: len(memos) == 4
+    assert resp.json()["progress"]["completed"] == 4
+
+
+def test_get_job_progress_partial_uses_successes(app_with_mock_service: Any) -> None:
+    """F1: Bei partial-Status: completed = top_n - failed."""
+    app, service = app_with_mock_service
+    failed_ids = [uuid4(), uuid4()]
+    job = MemoBatchJob(
+        id=uuid4(),
+        model_run_id=uuid4(),
+        top_n=5,
+        language="de",
+        status="partial",
+        failed_stock_ids=failed_ids,
+        error_message=None,
+        created_at=datetime.now(UTC),
+        started_at=datetime.now(UTC),
+        completed_at=datetime.now(UTC),
+    )
+    service.get_batch_job = AsyncMock(return_value=job)
+    mock_memos = [
+        AsyncMock(stock_id=uuid4(), one_liner=f"m{i}", model_version="claude-sonnet-4-6")
+        for i in range(3)
+    ]
+    service.list_memos_for_run = AsyncMock(return_value=mock_memos)
+    service.get_stock_ticker_map = AsyncMock(return_value={})
+
+    with TestClient(app) as client:
+        resp = client.get(f"/api/v1/memos/jobs/{job.id}")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["progress"]["completed"] == 3  # top_n(5) - failed(2)
+    assert body["progress"]["failed"] == 2
