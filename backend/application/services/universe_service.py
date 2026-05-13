@@ -38,7 +38,7 @@ class UniverseService:
             id=uuid.uuid4(),
             name=name,
             region=region,
-            tickers=tickers,
+            tickers=tuple(tickers),
         )
         await self._repository.save(universe)
         return universe

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
-import { UniverseList } from '../page';
+import { UniverseList } from '../universe-list';
 import type { UniverseRead } from '@/lib/api/universes';
 
 vi.mock('next/link', () => ({
