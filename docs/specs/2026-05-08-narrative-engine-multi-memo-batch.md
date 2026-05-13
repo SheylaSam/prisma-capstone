@@ -359,6 +359,12 @@ Frontend:
 
 **Frontend-Hinweis:** `progress.completed` / `progress.expected` als Progress-Bar, `memos[]` als Live-Stream. `is_error: true`-Memos können visuell als Error-Card gerendert werden (Badge + grauer Text statt normalem Memo-Layout).
 
+### Bekanntes Limit: `memos[]` ist Run-scoped, nicht Job-scoped
+
+`list_memos_for_run(model_run_id, language)` zieht **alle** persistierten Memos zu diesem Run — auch solche aus vorigen Single-Memo-Calls oder einem parallelen zweiten Batch-Job auf demselben Run (§12 Q4: kein Lock). In dem Fall enthält `memos[]` Einträge, die nicht zu *diesem* Job gehören; `progress.completed = len(memos)` ist dann nicht batch-genau.
+
+Tracking: Issue #86. Mittelfristige Lösung: Spalte `memo_batch_jobs.expected_stock_ids JSONB` + Filter im GET, dann ist `memos[]` strikt Job-scoped.
+
 ---
 
 ## 7. Cost & Caching
@@ -461,6 +467,12 @@ async def get_batch_job(self, job_id):
 ```
 
 Bei N=20 + 3-concurrent + ~3s/Memo erwartet ~20s Laufzeit. 10min Timeout ist sicher Stale-Marker ohne false-positives.
+
+### Bekanntes Limit: Background-Task überlebt `SIGTERM` nicht
+
+`asyncio.create_task(self._execute_batch(...))` ist an den FastAPI-Worker-Event-Loop gebunden. Bei einem `SIGTERM` während eines laufenden Batches (Render-Deploy, Auto-Restart) wird der Task ohne `await` gecancelt → Job bleibt in `running`, wird erst nach `STALE_BATCH_TIMEOUT_SECONDS` (10 min) via Lazy-Cleanup auf `failed` markiert.
+
+Für die Capstone-Demo akzeptabel. Tracking: Issue #87. Saubere Lösung: FastAPI-`lifespan`-Shutdown-Hook, der pending Tasks mit `error_message="server shutdown"` als `failed` markiert.
 
 ### Logging
 
