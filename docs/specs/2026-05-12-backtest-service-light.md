@@ -63,7 +63,10 @@ backend/
 │   ├── repositories/
 │   │   └── backtest_result_repository.py  # NEU (SQLA-Adapter)
 │   └── alembic/versions/
-│       └── 0007_create_backtest_results.py # NEU
+│       └── 000X_create_backtest_results.py # NEU — Nummer = nächste freie nach
+│                                          #        Merge von PR #70 (memo_batch_jobs)
+│                                          #        und PR #79 (pgvector + embeddings)
+│                                          #        Aktuell vermutlich 0009 oder 0010.
 └── interfaces/rest/
     ├── routers/backtests.py               # NEU
     └── dependencies.py                    # ERWEITERT (Repository + Service)
@@ -74,8 +77,8 @@ backend/
 | Komponente | Verantwortung | Tests |
 |---|---|---|
 | `BacktestService` | Orchestriert: Top-N aus ModelRun laden → Preise via MarketDataProvider → 3 Portfolios simulieren → Metriken berechnen → Persistieren. | Unit (Service mit Mock-Repos) + Integration (PG) |
-| `BacktestResult` | Pydantic-Entity mit `metrics: dict`, `series: dict[str, list[float]]`, dates, top_n, universe_id, model_run_id. | Unit |
-| `BacktestResultRepository` | Domain-Port + SQLA-Adapter (`save`, `get`). UPSERT auf `(universe_id, model_run_id, start_date, end_date, top_n)` falls Re-Run gewünscht. | Integration (PG) |
+| `BacktestResult` | Pydantic-Entity mit typisierten Sub-Schemata `PortfolioMetrics` + `BacktestSeries` (siehe §8), dates, top_n, universe_id, model_run_id. | Unit |
+| `BacktestResultRepository` | Domain-Port + SQLA-Adapter (`save`, `get`). UPSERT auf `(model_run_id, start_date, end_date, top_n, benchmark_ticker)` — v1.1: `benchmark_ticker` mit aufgenommen, sonst kollidieren zwei Runs mit unterschiedlichen Benchmarks ungewollt. | Integration (PG) |
 | `backtests.py`-Router | REST-Endpoints, FastAPI-DI, Pydantic-Request/Response. | Integration (FastAPI TestClient) |
 
 ---
@@ -84,13 +87,14 @@ backend/
 
 ```
 POST /api/v1/backtests/run
-{ universe_id, model_run_id, start_date, end_date, top_n=10, benchmark_ticker="^SSMI" }
+{ model_run_id, start_date, end_date, top_n=10, benchmark_ticker="^SSMI" }
   │
   ▼
 BacktestService.run_backtest(...)
   │
-  ├─ 1. Validate inputs:
-  │     - universe_id, model_run_id existieren (404 falls nein)
+  ├─ 1. Validate inputs (siehe §11 v1.1: `universe_id` aus Request entfernt — wird aus `model_run.universe_id` abgeleitet, eliminiert Validation-Lücke "fremdes Universe"):
+  │     - model_run_id existiert (404 falls nein) → universe_id = model_run.universe_id
+  │     - universe existiert (Sanity-Check, sollte via FK garantiert sein)
   │     - start_date < end_date, beide ≤ today
   │     - top_n > 0, top_n ≤ universe.stock_count
   │     - end_date - start_date ≥ 30 Tage (sonst Metriken unzuverlässig)
@@ -165,10 +169,23 @@ for date in prices.index:
 return (1 + pd.Series(portfolio_returns, index=prices.index)).cumprod()
 ```
 
+**`_monthly_rebalance_dates(idx: pd.DatetimeIndex) -> set[pd.Timestamp]`** (v1.1, war ungespezifiziert):
+
+```python
+def _monthly_rebalance_dates(idx: pd.DatetimeIndex) -> set[pd.Timestamp]:
+    """Letzter Trading-Day jedes Kalendermonats im Index.
+
+    Gängige Konvention, deterministisch aus dem Index ableitbar — keine
+    Holiday-Calendar-Annahmen. Implementation: pandas Grouper auf Monats-Ebene.
+    """
+    grouped = pd.Series(idx, index=idx).groupby(pd.Grouper(freq="ME"))
+    return set(grouped.last().dropna())
+```
+
 **Edge-Cases:**
-- Ticker mit NaN-Returns am Anfang (late listing) → in `prices.pct_change()` als NaN → `fillna(0)` setzt auf 0. **Bewusst**: alternative wäre den Ticker temporär aus weights zu entfernen, aber das verkompliziert ohne MVP-Nutzen.
-- Ticker mit Konkurs / Delisting in der History → letzter verfügbarer Preis wird forward-gefüllt (`prices.ffill()` vor `pct_change()`). Ist Approximation, OK für MVP.
-- Weniger als 1 voller Monat zwischen start_date und end_date → kein Rebalancing, Reine Drift.
+- **Statisches Universe Annahme** (v1.1, war implizit): Tickers müssen für die *ganze* Backtest-Periode gelistet sein. Late-Listings produzieren **Look-Ahead-Bias** — ein Ticker bekommt seinen 1/N-Anteil bevor er existiert, weil `pct_change().fillna(0)` für Pre-Listing-Tage 0%-Returns liefert aber `weights[i] = 1/N` trotzdem auf den Ticker angewandt wird. Out-of-scope für MVP — Validierung via §2 In-Scope-Annahme "statisches Universe während Backtest-Periode". Folge-Slice mit Walk-Forward-Universe muss das adressieren.
+- Ticker mit Konkurs / Delisting in der History → letzter verfügbarer Preis wird forward-gefüllt (`prices.ffill()` vor `pct_change()`). Approximation, OK für MVP.
+- Weniger als 1 voller Monat zwischen start_date und end_date → kein Rebalancing, reine Drift.
 
 ---
 
@@ -214,9 +231,8 @@ def _compute_metrics(series: pd.Series) -> dict[str, float]:
 ### `POST /api/v1/backtests/run`
 
 ```jsonc
-// Request
+// Request (v1.1: universe_id entfernt — wird aus model_run.universe_id abgeleitet)
 {
-  "universe_id": "550e8400-e29b-41d4-a716-446655440000",
   "model_run_id": "550e8400-e29b-41d4-a716-446655440001",
   "start_date": "2023-01-01",
   "end_date": "2025-12-31",
@@ -230,9 +246,10 @@ def _compute_metrics(series: pd.Series) -> dict[str, float]:
 **Status-Codes:**
 - `200`: Backtest erfolgreich
 - `400`: Validierungs-Fehler (z.B. start_date ≥ end_date, top_n > universe.size)
-- `404`: Universe oder ModelRun nicht gefunden
+- `404`: ModelRun nicht gefunden
 - `422`: Pydantic-Schema-Fehler
-- `503`: MarketDataProvider liefert keine Preise für den Zeitraum
+- `500`: Stub-MarketDataProvider liefert leeren DataFrame (Bug, sollte nicht passieren)
+- `503`: Echter MarketDataProvider (yfinance, Folge-Slice) unerreichbar / Rate-Limit
 
 ### `GET /api/v1/backtests/{id}`
 
@@ -245,6 +262,33 @@ def _compute_metrics(series: pd.Series) -> dict[str, float]:
 
 ```python
 # backend/domain/entities/backtest_result.py
+
+class PortfolioMetrics(BaseModel):
+    """Annualisierte Kennzahlen pro Portfolio (siehe §6)."""
+    total_return: float
+    cagr: float
+    annual_vol: float
+    sharpe: float
+    max_drawdown: float
+
+
+class BacktestSeries(BaseModel):
+    """Zeitreihen-Block, alle 4 Listen identisch lang (Validator)."""
+    dates: list[date]
+    prisma: list[float] = Field(..., description="Portfolio-Wert PRISMA Top-N, normiert auf 1.0 am start_date")
+    universe: list[float]
+    benchmark: list[float]
+
+    @model_validator(mode="after")
+    def _lengths_match(self) -> "BacktestSeries":
+        n = len(self.dates)
+        if not (len(self.prisma) == n and len(self.universe) == n and len(self.benchmark) == n):
+            raise ValueError(f"series-Listen müssen gleich lang sein (dates={n}, prisma={len(self.prisma)}, ...)")
+        if any(v < 0 for v in (*self.prisma, *self.universe, *self.benchmark)):
+            raise ValueError("Portfolio-Werte können nicht negativ werden")
+        return self
+
+
 class BacktestResult(BaseModel):
     id: UUID
     universe_id: UUID
@@ -253,14 +297,14 @@ class BacktestResult(BaseModel):
     end_date: date
     top_n: int = Field(..., ge=1, le=100)
     benchmark_ticker: str = Field(..., max_length=20)
-    metrics: dict[str, dict[str, float]]  # {"prisma": {...}, "universe": {...}, "benchmark": {...}}
-    series: dict[str, list]  # {"dates": [...], "prisma": [...], "universe": [...], "benchmark": [...]}
+    metrics: dict[Literal["prisma", "universe", "benchmark"], PortfolioMetrics]
+    series: BacktestSeries
     created_at: datetime
 ```
 
-**Validierung:**
-- `series["dates"]`, `series["prisma"]`, `series["universe"]`, `series["benchmark"]` müssen gleich lang sein
-- Alle floats ≥ 0 in den Series (Portfolio-Wert kann nicht negativ werden)
+**Validierung** (v1.1: getypte Sub-Schemata statt `dict[str, list]` — Pydantic-validiert + Frontend-TypeScript-generierbar):
+- `BacktestSeries`-Validator stellt sicher: alle 4 Listen gleich lang, alle Werte ≥ 0
+- `metrics`-dict ist typisiert auf die 3 Portfolio-Schlüssel (Literal)
 - `top_n` ≤ 100 (Sanity-Cap)
 
 ---
@@ -273,8 +317,8 @@ class BacktestResult(BaseModel):
 |---|---|
 | `test_backtest_service.py` | 5 Pfade mit Mock-Repos: (1) Happy-Path mit 5-Ticker-Universe + Top-3, deterministische Preise; (2) Top-N > universe.size → 400; (3) start_date ≥ end_date → 400; (4) Universe nicht gefunden → 404; (5) MarketDataProvider liefert leeren DataFrame → 503 |
 | `test_backtest_metrics.py` | Golden-Dataset für `_compute_metrics`: konstante 10% Jahres-Performance → CAGR≈0.10, Vol≈0, Sharpe=0, MaxDD=0. Eine 50%-Drawdown-Reihe → MaxDD≈-0.50 |
-| `test_backtest_portfolio_simulation.py` | `_simulate_portfolio` deterministisch: 2 Ticker × 2 Monate, Reset auf 50/50 nach Monatsende verifizieren |
-| `test_backtest_result_entity.py` | Pydantic-Validation: ungleiche Series-Längen → ValidationError, top_n > 100 → ValidationError |
+| `test_backtest_portfolio_simulation.py` | `_simulate_portfolio` deterministisch — zwei Scharfschuss-Tests: (a) 2 Ticker × 2 Monate, Reset auf 50/50 nach Monatsende verifizieren; (b) **v1.1: Drift-Mathematik gegen Handrechnung** — 2 Assets × 5 Tage mit deterministischen Returns (+10%/-5%/+5%/-2%/+1%), Portfolio-Value-Verlauf gegen vorab gerechnete Werte prüfen. Fängt Regression bei späterer Vectorize-Refaktorierung. |
+| `test_backtest_result_entity.py` | Pydantic-Validation: ungleiche Series-Längen → ValidationError, top_n > 100 → ValidationError, negative Portfolio-Werte → ValidationError |
 
 ### 9.2 Integration-Tests (`backend/tests/integration/`)
 
@@ -286,10 +330,10 @@ class BacktestResult(BaseModel):
 ### 9.3 Golden-Dataset
 
 `backend/tests/fixtures/backtest/perfect_strategy.json`:
-- 5 Ticker × 36 Monate
-- PRISMA Top-3 sind die mit der niedrigsten Vola
-- Erwartete Metriken vorab berechnet (numpy in Spec-Generierung verifiziert)
-- Test prüft Metrik-Übereinstimmung mit ±0.1%-Toleranz
+- 5 Ticker × 36 Monate, deterministische Preisreihen
+- Die Fixture **konstruiert die Preise so**, dass die 3 niedrig-Vola-Tickers im `model_run.results` an Top-3 stehen (BacktestService sortiert nicht selbst nach Vola — er nimmt die Top-N aus dem Run)
+- Erwartete Metriken vorab via NumPy berechnet und im Fixture-File abgelegt
+- Test prüft Metrik-Übereinstimmung mit **±0.5%-Toleranz** — bei `cumprod` über 36 Monate akkumuliert Floating-Point-Drift, ±0.1% wäre CI-Flake-gefährdet (v1.1: erst messen, dann Toleranz konkret begründen — initial 0.5%, kann nach erstem grünen Run verschärft werden)
 
 ### 9.4 Coverage-Ziel
 
@@ -305,13 +349,13 @@ Implementation ist komplett, wenn:
 
 - [ ] `BacktestResult`-Entity (Pydantic v2, UTC-aware) in `backend/domain/entities/`
 - [ ] `BacktestResultRepository`-Port + SQLA-Adapter mit UPSERT-Logik
-- [ ] Alembic-Migration `0007_create_backtest_results` (reversibel)
+- [ ] Alembic-Migration `000X_create_backtest_results` (reversibel) — Nummer = nächste freie nach Merge von #70 + #79 (siehe Risk in §10)
 - [ ] `BacktestService` mit `run_backtest` und `get_backtest_result` (siehe §3)
 - [ ] `_simulate_portfolio` mit monatlichem Reset-Rebalancing (siehe §5)
 - [ ] `_compute_metrics` mit allen 5 Metriken (siehe §6)
 - [ ] `POST /api/v1/backtests/run` und `GET /api/v1/backtests/{id}` live, in OpenAPI-Schema sichtbar
 - [ ] Alle Tests aus §9.1 und §9.2 grün
-- [ ] Golden-Dataset-Metriken matchen Spec-Erwartungen (±0.1%)
+- [ ] Golden-Dataset-Metriken matchen Spec-Erwartungen (initial ±0.5%, nach erstem grünen Run ggf. verschärfen)
 - [ ] Coverage neue Module ≥85%; Gesamtsuite bleibt ≥80% (CI-Gate aus PR #83)
 - [ ] mypy strict + ruff clean
 - [ ] Sample-Backtest-Result unter `docs/examples/backtest-result-sample.json`
@@ -322,20 +366,42 @@ Implementation ist komplett, wenn:
 
 ## 11. Bewusste Abweichungen von Parent-Spec
 
+### 11.1 Was die Light-Variante NICHT ist (v1.1 Aufmacher per #85-Review S3)
+
+**WICHTIGSTE Abweichung von Design-Spec §7.4**: Diese Slice macht **KEIN echtes Re-Ranking pro Monat**. "Monatliches Rebalancing nach Total Rank" wird interpretiert als **Reset auf Equal-Weight der Top-N** — der RankingService wird nicht erneut auf historischen Preisen ausgeführt.
+
+**Konkret**:
+- ✅ Wir nehmen *eine* `model_run_id` als Ausgangspunkt (typisch: aktueller Run)
+- ✅ Wir extrahieren die Top-N-Ticker daraus
+- ✅ Wir simulieren das Halten dieser N Ticker über die historische Periode mit monatlichem Equal-Weight-Reset
+- ❌ Wir laufen NICHT 36×RankingService für 36 Monate Backtest
+- ❌ Wir berücksichtigen NICHT dass die Top-N sich über die Zeit verändert hätten
+
+**Folge-Slice "echtes Re-Ranking"** braucht: Historical-Snapshot von Universe + Prices zu jedem Rebalancing-Datum, plus die Garantie dass alle 5 Quant-Modelle deterministisch auf historischen Daten laufen. Aufwand: 5-10× Light-Slice. **Nicht in MVP-Scope** — Spec §17 Backlog.
+
+### 11.2 Weitere bewusste Abweichungen
+
 | Parent-Spec-Stelle | Slice-Verhalten | Begründung |
 |---|---|---|
-| §7.4 — "monatliches Rebalancing **nach Total Rank**" | Rebalancing = Reset auf Equal-Weight (kein neues Ranking) | "Echtes" Re-Ranking braucht Historical-Snapshot-Konzept (Universe + Prices zu jedem Datum) — eigener Folge-Slice. Equal-Weight-Reset ist die naive aber spec-getreue Light-Interpretation. |
-| §9.5 — `run_backtest` Input nur `(Universe-ID, Start/End, Top-N)` | Zusätzlich `model_run_id` und `benchmark_ticker` als Inputs | Ohne `model_run_id` müsste BacktestService einen impliziten "neuesten" Run wählen oder selbst einen neuen erzeugen. Explizit ist klarer. `benchmark_ticker` als Default `^SSMI` + Konfig-Override. |
+| §9.5 — `run_backtest` Input nur `(Universe-ID, Start/End, Top-N)` | Input: `(model_run_id, Start/End, Top-N, benchmark_ticker)` — **`universe_id` entfernt** (v1.1 per #85-Review I3) | `model_run_id` enthält die Universe-Info schon; `universe_id` separat würde Validation-Lücke "fremdes Universe" öffnen. `benchmark_ticker` als Default `^SSMI` + Konfig-Override. |
 | §10.1 — Endpoint-Path | `/api/v1/backtests/run` und `/api/v1/backtests/{id}` | Konsistent mit den anderen Service-Pfaden (`/api/v1/...`). |
 | §14.3 — "Chart mit 3 Kurven" | 3 Portfolios: PRISMA Top-N + Universe-EW + Benchmark | Spec lässt offen welche 3. Diese Wahl bildet die "lohnt sich der Ranking-Aufwand?"-Frage (vs. Universe-EW als Naivität, vs. Benchmark als Markt-Baseline) am sinnvollsten ab. |
+
+### 11.3 Performance-Ziel (v1.1 Konsolidierung per #85-Review S4)
+
+| Provider | Ziel | Realität |
+|---|---|---|
+| StubMarketDataProvider | < 2s für 5J-Backtest, 5 Ticker | MVP-Default |
+| YFinanceMarketDataProvider (Folge-Slice) | < 30s für 5J-Backtest, 5 Ticker | Sync ist dann Grenze — Async/Job-Queue ab da nötig |
 
 ---
 
 ## 12. Offene Punkte vor Plan-Schreiben
 
-1. **Sync vs. Async**: MVP-Light ist sync (5J-Backtest mit Stub-Daten <2s). Bei echtem yfinance-Adapter wird Backtest >10s → async via Job-Queue nötig. Folge-Slice.
+1. **Sync vs. Async**: siehe §11.3 (Performance-Ziel) — Sync für MVP, Async für Folge-Slice.
 2. **Universe-Drift**: aktueller Slice ignoriert, dass ein Universe im Lauf der Zeit hinzugefügte/entfernte Ticker hat. Implementation nutzt das *aktuelle* Universe für die ganze Backtest-Periode. Akzeptabel für Light-Variante.
 3. **Benchmark-Datenquelle**: `^SSMI` kommt über den gleichen `MarketDataProvider` — Stub liefert für unbekannte Ticker einen 100-Random-Walk. Für die echte Demo brauchts ggf. einen separaten Index-Adapter. Folge-Slice.
+4. **Migration-Nummern-Kollision** (v1.1 per #85-Review I4): PR #70 belegt `0007`, PR #79 belegt `0008` (geplant 0009 nach Split). Diese Spec sagt explizit "nächste freie Nummer nach Merge von #70+#79" — konkret zugewiesen erst im Plan-Schreib-Schritt, nicht hier hartkodiert.
 
 ---
 
@@ -344,3 +410,4 @@ Implementation ist komplett, wenn:
 | Version | Datum | Autor | Änderung |
 |---|---|---|---|
 | Draft v1.0 | 2026-05-12 | Fabia / Claude Code Opus 4.7 | Initiale Slice-Spec — BacktestService Light, schneidet Monthly-Re-Ranking und Walk-Forward bewusst heraus |
+| Draft v1.1 | 2026-05-13 | Fabia / Claude Code Opus 4.7 | Sheylas Review-Findings (PR #85) eingearbeitet: I1 `_monthly_rebalance_dates` spezifiziert (letzter Trading-Day jedes Monats, Pseudocode in §5); I2 Late-Listing-Look-Ahead-Bias explizit in §5 Edge-Cases dokumentiert; I3 `universe_id` aus Request entfernt — wird aus `model_run.universe_id` abgeleitet (§4, §7, §11.2); I4 Migration-Nummer auf "nächste freie nach #70+#79" (§3, §10, §12); S1 `BacktestSeries` + `PortfolioMetrics` als typisierte Sub-Schemata (§8); S2 `benchmark_ticker` in UPSERT-Key aufgenommen (§3 Komponenten-Tabelle); S3 Kernabweichung als §11.1-Aufmacher prominent gemacht; S4 Performance-Ziel in §11.3 konsolidiert; S5 Drift-Mathematik-Test in §9.1 ergänzt; S6 Toleranz auf ±0.5% mit Begründung. N1 Stub-Empty-Response auf 500 + echtem-Provider-Fail auf 503 aufgesplittet; N2 §9.3-Formulierung präzisiert. |
