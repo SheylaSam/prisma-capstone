@@ -420,10 +420,18 @@ class NarrativeService:
             n_failed,
         )
 
-        # W1 Race-Fix: Vor dem Final-Save pruefen ob ein Stale-Cleanup (in
+        # W1 Race-Fix: Vor dem Final-Save prüfen ob ein Stale-Cleanup (in
         # get_batch_job) den Job zwischenzeitlich auf 'failed' gesetzt hat.
-        # Falls ja: NICHT ueberschreiben — User wuerde sonst kurzzeitig
-        # 'failed' sehen und spaeter 'complete' (last-write-wins-Race).
+        # Falls ja: NICHT überschreiben — User würde sonst kurzzeitig
+        # 'failed' sehen und später 'complete' (last-write-wins-Race).
+        #
+        # F5 — TOCTOU-Fenster: Zwischen re-read (unten) und final save besteht
+        # ein kleines Fenster in dem get_batch_job den Job auf 'failed' setzen
+        # könnte: (1) re-read → still "running", (2) GET-Request kommt rein und
+        # setzt "failed", (3) Worker schreibt "complete".
+        # Das Fenster ist <1ms (zwei aufeinanderfolgende await-Punkte ohne I/O
+        # dazwischen) — für Capstone-Volumen akzeptabel.
+        # Echte Lösung: optimistic locking mit version-column oder DB-CAS.
         current = await self._batch_repo.get(job_id)
         if current is not None and current.status == "failed" and current.started_at is not None:
             elapsed = (datetime.now(tz=UTC) - current.started_at).total_seconds()
