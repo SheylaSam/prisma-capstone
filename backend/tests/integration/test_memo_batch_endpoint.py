@@ -126,6 +126,21 @@ def test_post_batch_returns_402_budget_exceeded(app_with_mock_service: Any) -> N
     assert int(retry_after) > 0
 
 
+def test_post_batch_returns_422_on_value_error(app_with_mock_service: Any) -> None:
+    """F4: Wenn start_batch ValueError wirft, muss 422 zurückkommen statt 500."""
+    app, service = app_with_mock_service
+    service.start_batch = AsyncMock(side_effect=ValueError("top_n must be 1..100, got 0"))
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/v1/memos/batch",
+            json={"model_run_id": str(uuid4()), "top_n": 20},
+        )
+
+    assert resp.status_code == 422
+    assert "top_n" in resp.json().get("detail", "").lower()
+
+
 def test_get_job_returns_404_unknown(app_with_mock_service: Any) -> None:
     app, service = app_with_mock_service
     service.get_batch_job = AsyncMock(return_value=None)

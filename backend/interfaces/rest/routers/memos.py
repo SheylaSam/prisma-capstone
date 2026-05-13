@@ -133,6 +133,14 @@ async def post_batch(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except NotImplementedError as exc:
         raise HTTPException(status_code=501, detail=str(exc)) from exc
+    except ValueError as exc:
+        # F4: start_batch wirft ValueError bei ungültigem top_n (z.B. top_n=0).
+        # Pydantic-Schema filtert das normalerweise, aber bei direktem Service-
+        # Aufruf oder Schema-Bypass → 422 statt 500.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
     # BudgetCapExceeded: NICHT lokal fangen — globaler Handler in
     # exception_handlers.py liefert 402 mit strukturiertem Body + Retry-After.
     # Konsistent ueber alle AI-Endpoints (PR #70 W2).
