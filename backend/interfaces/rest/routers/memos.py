@@ -19,8 +19,8 @@ from pydantic import BaseModel
 
 from backend.application.services.narrative_service import NarrativeService
 from backend.domain.entities.research_memo import (
-    ContradictionItem,
     ERROR_FALLBACK_MODEL_VERSION,
+    ContradictionItem,
     ResearchMemo,
 )
 from backend.interfaces.rest.dependencies import get_narrative_service

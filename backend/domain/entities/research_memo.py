@@ -6,7 +6,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-
 # Sentinel-Wert für Memos die bei LLM-Fehler als Fallback persistiert wurden.
 # Referenz: NarrativeService._build_error_memo_schema()
 # Zentrale Definition vermeidet Magic-String-Drift zwischen Service und Router.
