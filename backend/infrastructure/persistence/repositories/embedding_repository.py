@@ -56,11 +56,24 @@ class SQLAEmbeddingRepository(EmbeddingRepository):
         async with self._session_factory() as session:
             # UPSERT: bei (document_id, chunk_idx)-Konflikt update statt fehlschlagen.
             # Macht Re-Ingestion idempotent.
+            #
             # `pg_insert` gegen die `__table__` (statt der ORM-Klasse) — damit
             # konsistent DB-Column-Namen (`metadata`) verwendet werden koennen,
             # ohne mit `Base.metadata` zu kollidieren (was bei pg_insert(ORM)
             # einen Mapping-Konflikt zwischen ORM-Attribute `chunk_metadata` und
-            # Column `metadata` ausloest).
+            # Column `metadata` ausloest — SQLA versucht, das ORM-Attribut
+            # `chunk_metadata` aus dem dict zu lesen, findet aber Key `metadata`).
+            #
+            # `# type: ignore[arg-type]` ist noetig, weil mypy `pg_insert` als
+            # `Insert[ORM]` typisiert und ein `Table` nicht in `type[ORM]` passt.
+            # Zur Laufzeit ist `pg_insert(Table)` jedoch das offizielle SQLA-2.0-
+            # Pattern fuer raw-Column-Inserts (siehe SQLA-Doc "Insert objects":
+            # https://docs.sqlalchemy.org/en/20/dialects/postgresql.html#insert-on-conflict-upsert
+            # — Beispiele dort verwenden ebenfalls `__table__`).
+            #
+            # Folge-Slice: wenn `metadata` ohnehin nur intern verwendet wird,
+            # koennte das ORM-Attribut umbenannt werden zu z.B. `meta`, um den
+            # Workaround loszuwerden. Out-of-scope fuer Slice 1.
             stmt = pg_insert(EmbeddingChunkORM.__table__).values(  # type: ignore[arg-type]
                 [
                     {

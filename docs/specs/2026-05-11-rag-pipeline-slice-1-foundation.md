@@ -321,7 +321,12 @@ muss real verifiziert werden.
 
 ## 11. Folge-Slices (nicht Teil von Slice 1)
 
-- **Slice 2 — Ingestion:** SEC-EDGAR-Download, PDF-Parsing, Chunking, Voyage-Embedding-Calls, Batch-Upsert. Real $0.24 Kosten. Acceptance: 4000+ Chunks fuer 5 Ticker.
+- **Slice 2 — Ingestion:** SEC-EDGAR-Download, PDF-Parsing, Chunking, Voyage-Embedding-Calls, Batch-Upsert. Real ~$0.24 Kosten. Acceptance: 4000+ Chunks fuer 5 Ticker.
+
+  **Cost-Herleitung:** 4000 Chunks × ~333 tokens/Chunk × $0.18 / 1 Mio. Tokens = $0.24.
+  - 333 tokens/Chunk entspricht ~1000 Zeichen bei der konservativen 3-chars/token-Schaetzung aus `backend/infrastructure/llm/client.py` (Konstante `_CHARS_PER_TOKEN_ESTIMATE`).
+  - $0.18/Mtok ist `voyage-3-large` `embed_per_mtok` aus `backend/infrastructure/llm/pricing.py` (per ADR-0004 §4).
+  - Realer Chunk-Token-Count via Voyage-Tokenizer kann ±50% schwanken — Realistische Range: **$0.12-$0.36** fuer einen vollen Slice-2-Ingestion-Run. Bei Pre-Production-Smoke ist das von Budget-Cap $20 weit weg.
 - **Slice 3 — Retrieval:** `EmbeddingRepository.find_nearest(query_embedding, k)`, `RetrievalService`, REST-Endpoint `POST /api/v1/rag/retrieve`. Auth via existing `require_api_key`.
 - **Slice 4 (optional) — Hardening:** Caching der Query-Embeddings, Metric-Logging, README-Doku.
 

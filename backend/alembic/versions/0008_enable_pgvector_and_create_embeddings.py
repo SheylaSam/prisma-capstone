@@ -73,10 +73,24 @@ def upgrade() -> None:
     # `vector`-Typ auf 2000 dim fuer Indexierung; wir nutzen 2048 (voyage-
     # 3-large per ADR-0004). Loesung: Application-Column bleibt
     # `vector(2048)` (volle Praezision), Index nutzt `halfvec(2048)`-Cast
-    # (16-bit floats, Index-Limit 4000 dim). Recall-Verlust durch
-    # Half-Precision-Quantisierung ist marginal (~0.1% laut pgvector-
-    # Benchmarks) und industry-standard. m=16/ef_construction=64 sind
-    # pgvector-Defaults und passen fuer ~4000-100k Chunks ohne Tuning.
+    # (16-bit floats, Index-Limit 4000 dim).
+    #
+    # Quellen:
+    # - pgvector README §"Vectors" + §"HNSW":
+    #   https://github.com/pgvector/pgvector#vectors
+    #   https://github.com/pgvector/pgvector#hnsw
+    # - `m=16` / `ef_construction=64` sind die pgvector-HNSW-Defaults
+    #   (siehe README-Snippet "Index Build Options"). Sie sind fuer
+    #   Korpus-Groessen ~10k-1M Vektoren etabliert; unser Slice-2-Ziel
+    #   (~4000 Chunks fuer 5 Ticker) liegt am unteren Ende und braucht
+    #   kein Tuning.
+    # - Recall-Verlust durch halfvec ist laut pgvector-Maintainer-Hinweisen
+    #   "minimal" (kein konkreter Prozentsatz im README; in pgvector-Issue
+    #   #461 als "negligible for most workloads" beschrieben). Falls Slice
+    #   2/3 ein Recall-Regressions-Issue zeigt, koennen wir auf
+    #   `vector_cosine_ops` mit Dim<=2000 wechseln (z.B. via PCA-Reduktion
+    #   oder voyage-3-small mit dim=1024) — out-of-scope fuer Slice 1.
+    #
     # In Slice 1 ist die Tabelle leer; Index funktioniert trotzdem.
     op.execute(
         "CREATE INDEX ix_embedding_chunks_embedding "
