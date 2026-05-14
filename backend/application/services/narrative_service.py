@@ -273,9 +273,9 @@ class NarrativeService:
                             update={
                                 "status": "failed",
                                 "completed_at": datetime.now(tz=UTC),
-                                "error_message": (
-                                    f"Worker crash: {type(exc).__name__}: {exc}"
-                                )[:1000],
+                                "error_message": (f"Worker crash: {type(exc).__name__}: {exc}")[
+                                    :1000
+                                ],
                             }
                         )
                     )

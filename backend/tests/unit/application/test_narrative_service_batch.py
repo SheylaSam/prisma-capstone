@@ -959,7 +959,10 @@ class TestExecuteBatchCrashGuard:
         assert final_save.status == "failed"
         assert final_save.completed_at is not None
         assert final_save.error_message is not None
-        assert "RuntimeError" in final_save.error_message or "crash" in final_save.error_message.lower()
+        assert (
+            "RuntimeError" in final_save.error_message
+            or "crash" in final_save.error_message.lower()
+        )
 
     async def test_unexpected_exception_in_one_does_not_crash_worker(self) -> None:
         """F2: Catch-all in _one() verhindert dass ein einzelner Stock-Fehler
