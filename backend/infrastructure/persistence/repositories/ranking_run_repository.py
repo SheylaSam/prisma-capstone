@@ -30,6 +30,7 @@ class SQLARankingRunRepository(RankingRunRepository):
                 status=run.status,
             )
         )
+        await self._session.flush()  # flush macht pending merge für folgende Aufrufe sichtbar
 
     async def list_by_universe(self, universe_id: UUID) -> list[RankingRun]:
         stmt = (
@@ -41,6 +42,7 @@ class SQLARankingRunRepository(RankingRunRepository):
         return [self._to_domain(row) for row in result.scalars().all()]
 
     async def save_results(self, run_id: UUID, results: list[dict[str, Any]]) -> None:
+        await self._session.flush()  # pending save() sichtbar machen vor UPDATE
         await self._session.execute(
             update(RankingRunORM).where(RankingRunORM.id == run_id).values(results=results)
         )

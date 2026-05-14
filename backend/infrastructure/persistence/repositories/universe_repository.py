@@ -31,6 +31,7 @@ class SQLAUniverseRepository(UniverseRepository):
                 tickers=list(universe.tickers),
             )
         )
+        await self._session.flush()  # flush macht pending merge für folgende Aufrufe sichtbar
 
     @staticmethod
     def _to_domain(orm: UniverseORM) -> Universe:
