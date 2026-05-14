@@ -53,7 +53,7 @@ async def test_get_fundamentals_provider_production_logs_warning(
 ) -> None:
     import logging
 
-    settings = Settings(environment="production")
+    settings = Settings(environment="production", api_key="test-key")
     with caplog.at_level(logging.WARNING, logger="backend.interfaces.rest.dependencies"):
         await get_fundamentals_provider(settings=settings)
     assert "StubFundamentalsProvider" in caplog.text
@@ -66,7 +66,7 @@ async def test_get_market_data_provider_production_logs_warning(
 ) -> None:
     import logging
 
-    settings = Settings(environment="production")
+    settings = Settings(environment="production", api_key="test-key")
     with caplog.at_level(logging.WARNING, logger="backend.interfaces.rest.dependencies"):
         await get_market_data_provider(settings=settings)
     assert "StubMarketDataProvider" in caplog.text
