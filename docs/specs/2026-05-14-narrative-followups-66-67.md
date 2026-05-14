@@ -59,7 +59,11 @@ Probleme:
 - `backend/domain/entities/research_memo.py` — neues Feld `is_error: bool = False`
 - `backend/infrastructure/persistence/orm/research_memo_orm.py` — `is_error: Mapped[bool] = mapped_column(...)` (existing column-list erweitert)
 - `backend/infrastructure/persistence/repositories/research_memo_repository.py` — `_to_entity` / `_to_orm`-Mapping erweitern
-- `backend/application/services/narrative_service.py` — `_build_error_memo_schema` setzt is_error=True; check ob die Persistenz-Brücke (Schema→Entity-Konvertierung) `is_error` korrekt durchreicht
+- `backend/application/services/narrative_service.py` — `_build_memo_entity` (Schema→Entity-Brücke bei `narrative_service.py:641`) leitet `is_error` aus dem Schema ab:
+  ```python
+  is_error=(schema.model_version == ERROR_FALLBACK_MODEL_VERSION)
+  ```
+  Damit bleibt die Heuristik **an einer einzigen Stelle** (Persistenz-Brücke), wird auf Write-Time evaluiert und als gespeicherter Fakt persistiert. Router liest danach `memo.is_error` als reine Property. `_build_error_memo_schema` selbst bleibt unverändert (setzt weiter `model_version=ERROR_FALLBACK_MODEL_VERSION`, sonst nichts).
 - `backend/interfaces/rest/routers/memos.py` — Zeile 63-65 → `is_error=memo.is_error` (direkter Attribute-Read); Zeile 185 (`get_job` → `BatchMemoSummary`) analog: `is_error=m.is_error`
 
 **Was sich NICHT ändert:**
