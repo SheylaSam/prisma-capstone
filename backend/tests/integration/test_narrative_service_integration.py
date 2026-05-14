@@ -14,9 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from backend.application.services.cost_tracker import CostTracker
 from backend.application.services.narrative_service import NarrativeService
 from backend.infrastructure.llm.client import LLMClient
+from backend.infrastructure.llm.pricing import PRICING
 from backend.infrastructure.llm.prompts.prompt_loader import PromptTemplateLoader
 from backend.infrastructure.persistence.repositories.cost_log_repository import (
     SQLACostLogRepository,
+)
+from backend.infrastructure.persistence.repositories.memo_batch_job_repository import (
+    SQLAMemoBatchJobRepository,
 )
 from backend.infrastructure.persistence.repositories.ranking_run_repository import (
     SQLARankingRunRepository,
@@ -169,20 +173,27 @@ async def test_full_pipeline_top_quality_fixture(
     session_factory, ids = seeded_run_with_stock
 
     stub = StubAnthropicClient([FIXTURES / "top_quality_stock.json"])
+    cost_tracker = CostTracker(
+        repository=SQLACostLogRepository(session_factory),
+        pricing=PRICING,
+        cap_usd=Decimal("20"),
+    )
     async with session_factory() as session:
         service = NarrativeService(
             memo_repository=SQLAResearchMemoRepository(session_factory),
             run_repository=SQLARankingRunRepository(session),
             stock_repository=SQLAStockRepository(session),
+            batch_repository=SQLAMemoBatchJobRepository(session_factory),
             llm_client=LLMClient(
                 anthropic=stub,
                 voyage=None,
-                cost_tracker=CostTracker(
-                    repository=SQLACostLogRepository(session_factory),
-                    cap_usd=Decimal("20"),
-                ),
+                cost_tracker=cost_tracker,
             ),
             prompt_loader=PromptTemplateLoader(),
+            cost_tracker=cost_tracker,
+            session_factory=session_factory,
+            stock_repo_factory=lambda s: SQLAStockRepository(session=s),
+            run_repo_factory=lambda s: SQLARankingRunRepository(session=s),
         )
 
         memo = await service.generate_memo(ids["stock_id"], ids["run_id"])
@@ -199,20 +210,27 @@ async def test_pydantic_fail_persists_error_memo(
     session_factory, ids = seeded_run_with_stock
 
     stub = StubAnthropicClient([FIXTURES / "malformed_response.json"])
+    cost_tracker = CostTracker(
+        repository=SQLACostLogRepository(session_factory),
+        pricing=PRICING,
+        cap_usd=Decimal("20"),
+    )
     async with session_factory() as session:
         service = NarrativeService(
             memo_repository=SQLAResearchMemoRepository(session_factory),
             run_repository=SQLARankingRunRepository(session),
             stock_repository=SQLAStockRepository(session),
+            batch_repository=SQLAMemoBatchJobRepository(session_factory),
             llm_client=LLMClient(
                 anthropic=stub,
                 voyage=None,
-                cost_tracker=CostTracker(
-                    repository=SQLACostLogRepository(session_factory),
-                    cap_usd=Decimal("20"),
-                ),
+                cost_tracker=cost_tracker,
             ),
             prompt_loader=PromptTemplateLoader(),
+            cost_tracker=cost_tracker,
+            session_factory=session_factory,
+            stock_repo_factory=lambda s: SQLAStockRepository(session=s),
+            run_repo_factory=lambda s: SQLARankingRunRepository(session=s),
         )
 
         memo = await service.generate_memo(ids["stock_id"], ids["run_id"])
@@ -234,20 +252,27 @@ async def test_cache_hit_smoke_two_sequential_calls(
             FIXTURES / "contradictory_quality_risk.json",
         ]
     )
+    cost_tracker = CostTracker(
+        repository=SQLACostLogRepository(session_factory),
+        pricing=PRICING,
+        cap_usd=Decimal("20"),
+    )
     async with session_factory() as session:
         service = NarrativeService(
             memo_repository=SQLAResearchMemoRepository(session_factory),
             run_repository=SQLARankingRunRepository(session),
             stock_repository=SQLAStockRepository(session),
+            batch_repository=SQLAMemoBatchJobRepository(session_factory),
             llm_client=LLMClient(
                 anthropic=stub,
                 voyage=None,
-                cost_tracker=CostTracker(
-                    repository=SQLACostLogRepository(session_factory),
-                    cap_usd=Decimal("20"),
-                ),
+                cost_tracker=cost_tracker,
             ),
             prompt_loader=PromptTemplateLoader(),
+            cost_tracker=cost_tracker,
+            session_factory=session_factory,
+            stock_repo_factory=lambda s: SQLAStockRepository(session=s),
+            run_repo_factory=lambda s: SQLARankingRunRepository(session=s),
         )
 
         await service.generate_memo(ids["stock_id"], ids["run_id"])
