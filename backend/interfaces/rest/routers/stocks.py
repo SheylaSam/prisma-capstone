@@ -2,14 +2,9 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from backend.application.services.factsheet_service import FactsheetService, StockNotFound
 from backend.application.services.stock_service import StockService
-from backend.domain.repositories.ranking_run_repository import RankingRunRepository
-from backend.domain.repositories.stock_repository import StockRepository
-from backend.interfaces.rest.dependencies import (
-    get_ranking_run_repository,
-    get_stock_repository,
-    get_stock_service,
-)
+from backend.interfaces.rest.dependencies import get_factsheet_service, get_stock_service
 from backend.interfaces.rest.schemas.stock import (
     LatestRankingSnapshot,
     StockFactsheet,
@@ -44,12 +39,11 @@ async def list_stocks(
 )
 async def get_factsheet(
     ticker: str,
-    stock_repo: StockRepository = Depends(get_stock_repository),
-    run_repo: RankingRunRepository = Depends(get_ranking_run_repository),
+    service: FactsheetService = Depends(get_factsheet_service),
 ) -> StockFactsheet:
-    stock = await stock_repo.get_by_ticker(ticker)
-    if stock is None:
-        raise HTTPException(status_code=404, detail=f"Stock '{ticker.upper()}' not found")
-    raw = await run_repo.get_latest_ticker_result(ticker)
+    try:
+        stock, raw = await service.get_factsheet(ticker)
+    except StockNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     snapshot = LatestRankingSnapshot.model_validate(raw) if raw is not None else None
     return StockFactsheet(stock=StockRead.model_validate(stock), latest_ranking=snapshot)

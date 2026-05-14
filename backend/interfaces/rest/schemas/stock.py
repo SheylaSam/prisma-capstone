@@ -30,7 +30,7 @@ class LatestRankingSnapshot(BaseModel):
     """Ranking-Ergebnis eines Tickers aus dem neuesten abgeschlossenen Run."""
 
     total_rank: int | None
-    weighted_avg: float
+    weighted_avg: float | None
     is_sweet_spot: bool
     per_model_ranks: dict[str, int | None]
 

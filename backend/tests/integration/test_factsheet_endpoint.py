@@ -9,12 +9,13 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from backend.application.services.factsheet_service import FactsheetService
 from backend.domain.entities.ranking_run import RankingRun
 from backend.domain.entities.stock import Stock
 from backend.domain.repositories.ranking_run_repository import RankingRunRepository
 from backend.domain.repositories.stock_repository import StockRepository
 from backend.interfaces.rest.app import create_app
-from backend.interfaces.rest.dependencies import get_ranking_run_repository, get_stock_repository
+from backend.interfaces.rest.dependencies import get_factsheet_service
 
 pytestmark = pytest.mark.integration
 
@@ -92,8 +93,11 @@ def _make_app(
     run_results: dict[str, dict[str, Any]] | None = None,
 ) -> Any:
     app = create_app()
-    app.dependency_overrides[get_stock_repository] = lambda: _FakeStockRepo(stocks)
-    app.dependency_overrides[get_ranking_run_repository] = lambda: _FakeRunRepo(run_results)
+    stock_repo = _FakeStockRepo(stocks)
+    run_repo = _FakeRunRepo(run_results)
+    app.dependency_overrides[get_factsheet_service] = lambda: FactsheetService(
+        stock_repo=stock_repo, run_repo=run_repo
+    )
     return app
 
 
