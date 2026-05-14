@@ -29,7 +29,7 @@ def _make_client(responses: list[httpx.Response], *, api_key: str = "test-key") 
     return client
 
 
-def _ok(body: dict) -> httpx.Response:  # type: ignore[type-arg]
+def _ok(body: dict | list) -> httpx.Response:  # type: ignore[type-arg]
     return httpx.Response(200, content=json.dumps(body).encode())
 
 

@@ -13,7 +13,7 @@ mcp = FastMCP("PRISMA")
 _client = RESTClient.from_env()
 
 
-@mcp.tool()  # type: ignore[untyped-decorator]
+@mcp.tool()
 async def run_ranking(
     universe_id: str,
     weights: dict[str, float] | None = None,

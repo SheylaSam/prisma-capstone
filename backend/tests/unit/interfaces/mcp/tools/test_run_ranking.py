@@ -1,5 +1,6 @@
 """Tests für run_ranking Tool-Handler."""
 
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -34,7 +35,10 @@ _RANKINGS = [
 ]
 
 
-def _mock_client(run_resp=_RUN_RESPONSE, rankings=_RANKINGS):  # type: ignore[no-untyped-def]
+def _mock_client(
+    run_resp: dict[str, Any] = _RUN_RESPONSE,
+    rankings: list[dict[str, Any]] = _RANKINGS,
+) -> AsyncMock:
     client = AsyncMock()
     client.post = AsyncMock(return_value=run_resp)
     client.get = AsyncMock(return_value=rankings)
@@ -87,7 +91,7 @@ async def test_invalid_uuid_raises() -> None:
 
 @pytest.mark.asyncio
 async def test_total_rank_none_sorted_last() -> None:
-    rankings_with_none = [
+    rankings_with_none: list[dict[str, Any]] = [
         {
             "ticker": "X",
             "total_rank": None,

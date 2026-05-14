@@ -3,8 +3,8 @@
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from backend.config import Settings
-from backend.interfaces.rest.dependencies import get_settings, require_api_key
+from backend.config import Settings, get_settings
+from backend.interfaces.rest.dependencies import require_api_key
 
 _BASE_SETTINGS = Settings(
     database_url="postgresql+asyncpg://x:x@x/x",
