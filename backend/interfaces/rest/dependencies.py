@@ -1,9 +1,12 @@
 """FastAPI Dependency-Injection-Kette: Session → Repository → Service."""
 
 import hmac
+import logging
 from collections.abc import AsyncGenerator
 from functools import lru_cache
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 import anthropic
 from fastapi import Depends, Header, HTTPException
@@ -122,11 +125,25 @@ async def get_factsheet_service(
     return FactsheetService(stock_repo=stock_repo, run_repo=run_repo)
 
 
-async def get_fundamentals_provider() -> FundamentalsProvider:
+async def get_fundamentals_provider(
+    settings: Settings = Depends(get_settings),
+) -> FundamentalsProvider:
+    if settings.environment == "production":
+        _logger.warning(
+            "StubFundamentalsProvider active in production — serving synthetic data. "
+            "Wire a real FundamentalsProvider before going live (Issue #41)."
+        )
     return StubFundamentalsProvider()
 
 
-async def get_market_data_provider() -> MarketDataProvider:
+async def get_market_data_provider(
+    settings: Settings = Depends(get_settings),
+) -> MarketDataProvider:
+    if settings.environment == "production":
+        _logger.warning(
+            "StubMarketDataProvider active in production — serving synthetic data. "
+            "Wire a real MarketDataProvider before going live (Issue #41)."
+        )
     return StubMarketDataProvider()
 
 
