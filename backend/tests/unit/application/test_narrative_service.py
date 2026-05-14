@@ -759,6 +759,33 @@ async def test_generate_memo_persists_error_memo_on_entity_validation_error(
     assert len(list(log_dir.glob("*.json"))) == 1
 
 
+def test_rankings_for_template_returns_only_rank_no_score() -> None:
+    """Issue #66: erfundener Score (1/rank) entfernt — nur reale Rank-Daten."""
+    from backend.application.services.narrative_service import _rankings_for_template
+
+    out = _rankings_for_template(
+        {
+            "per_model_ranks": {
+                "quality_classic": 8,
+                "alpha": 12,
+                "trend_momentum": 25,
+                "value_alpha_potential": 60,
+                "diversification": 5,
+            }
+        }
+    )
+
+    assert out == {
+        "Quality Classic": {"rank": 8},
+        "Alpha": {"rank": 12},
+        "Trend Momentum": {"rank": 25},
+        "Value Alpha Potential": {"rank": 60},
+        "Diversification": {"rank": 5},
+    }
+    for model_data in out.values():
+        assert "score" not in model_data
+
+
 class TestBuildMemoEntityIsError:
     """_build_memo_entity setzt is_error aus schema.model_version (#67)."""
 
