@@ -135,7 +135,14 @@ LLM-Code mit StubClient grün ≠ production-ready. Mindestens 1× gegen echte A
 ## 2026-05-14 · Narrative-Followups Bundle #66 + #67 (PR #__, Branch `feat/narrative-followups-66-67`)
 - **Agent**: Claude Code (Opus 4.7, 1M-Kontext) als Controller, mit `superpowers:brainstorming` (4 Q-by-Q-Fragen) → `superpowers:writing-plans` (12-Task-Plan inkl. Pre-Execution-Check für #116-Abhängigkeit) → `superpowers:subagent-driven-development` (general-purpose-Subagents pro Task, Sonnet 4.6 für Service-/Router-Logik, Haiku 4.5 für mechanische Refactor- und Template-Edits). Sheyla startete subagent-driven, ging dann offline ("ich fahre nach Hause") und liess die Pipeline autonom durchlaufen.
 - **Scope**: Zwei thematisch zusammengehörige Folge-Fixes aus PR #64-Review als 1 PR. (a) **#66** — `_rankings_for_template`-Helper liefert keinen erfundenen `score = 1/rank` mehr; DE + EN User-Templates und System-Prompt-Few-Shots ohne Score-Werte. (b) **#67** — `is_error: bool` als reguläres Feld auf `ResearchMemo`-Entity + ORM-Spalte + Migration 0009 + Backfill via Sentinel; Router-String-Match (`one_liner.startswith("Memo-Generierung fehlgeschlagen")`) entkernt — kritisch für EN-Memos, die der String-Match nach #116-Merge false-negative gemeldet hätte. `ERROR_FALLBACK_MODEL_VERSION`-Sentinel bleibt als zusätzliche DB-Markierung. **9 Implementation-Commits + 3 Spec/Plan-Commits = 12 Commits gesamt.**
-- **Real-API-Smoke (DE, Sonnet 4.6)**: [WERTE NACH MANUELLEM SMOKE-RUN EINTRAGEN — `source .venv/bin/activate && python scripts/smoke_narrative_real_api.py --lang=de`]
+- **Real-API-Smoke (DE, Sonnet 4.6, 2026-05-14)**:
+
+  | | Input | Output | Cache-Create | Cache-Read | Latenz | Kosten |
+  |---|---|---|---|---|---|---|
+  | Call 1 | 662 | 863 | 3229 | 0 | 19.10s | $0.0270 |
+  | Call 2 | 21 | 856 | 641 | 3229 | 13.76s | $0.0163 |
+
+  Cache-Read auf Call 2: ✓ (3229 Tokens). `cache_control: ephemeral` wird korrekt durchgereicht; Anthropic cached den (jetzt Score-freien) DE-System-Block. Tool-Use-Output beider Calls validiert gegen `ResearchMemoSchema`. one_liner Call 1: „Starkes Quality-Risiko-Profil mit klarem Momentum, jedoch kaum Reversion-Potenzial." — **kein Score-Wording**, Anti-Hallucination-Effekt von #66 verifiziert. Cache-Create-Tokens 3229 vs. die ~2600 aus dem alten EN-System-Smoke (PR #76/#116) reflektieren längeren DE-System-Prompt + Cache-Reset durch Few-Shot-Edit.
 - **Was gut lief**:
   - **Brainstorming-Disziplin (P1)**: 4 Q-by-Q-Fragen vor Spec (Few-Shot-Score-Strategie, Sentinel-Behalten-vs-Droppen, Migration-Backfill-Strategie, Bundle-vs-Split) ergaben einen vollständig vorab entschiedenen Design-Space — keine Mid-Implementation-Iterationen.
   - **Spec-Self-Review hat 1 echte Ambiguität gefangen**: §2.2 sagte zunächst "Service setzt is_error explizit" ohne zu sagen wo — präzisiert auf `_build_memo_entity` (Schema→Entity-Brücke) als Single-Point-of-Truth. Ohne Self-Review hätte die Subagent-Implementation diese Entscheidung still selbst getroffen, womöglich anders.
