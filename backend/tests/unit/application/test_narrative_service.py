@@ -757,3 +757,49 @@ async def test_generate_memo_persists_error_memo_on_entity_validation_error(
     log_dir = tmp_path / "logs" / "malformed_memos"
     assert log_dir.exists()
     assert len(list(log_dir.glob("*.json"))) == 1
+
+
+class TestBuildMemoEntityIsError:
+    """_build_memo_entity setzt is_error aus schema.model_version (#67)."""
+
+    def _make_schema(self, *, model_version: str) -> Any:
+        from backend.domain.schemas.research_memo_schema import ResearchMemoSchema
+
+        return ResearchMemoSchema(
+            ticker="NESN",
+            total_rank=1,
+            one_liner="Test-Memo fuer Unit-Test",
+            ranking_interpretation="x" * 100,
+            sweet_spot=False,
+            sweet_spot_explanation=None,
+            contradictions=[],
+            key_strengths=["s1"],
+            key_risks=["r1"],
+            confidence="low",
+            generated_at=datetime.now(tz=UTC),
+            model_version=model_version,
+        )
+
+    def test_error_fallback_model_version_marks_is_error_true(self) -> None:
+        from backend.domain.entities.research_memo import ERROR_FALLBACK_MODEL_VERSION
+
+        schema = self._make_schema(model_version=ERROR_FALLBACK_MODEL_VERSION)
+        entity = NarrativeService._build_memo_entity(
+            None,  # type: ignore[arg-type]
+            schema,
+            stock_id=uuid4(),
+            model_run_id=uuid4(),
+            language="de",
+        )
+        assert entity.is_error is True
+
+    def test_normal_model_version_keeps_is_error_false(self) -> None:
+        schema = self._make_schema(model_version="claude-sonnet-4-6")
+        entity = NarrativeService._build_memo_entity(
+            None,  # type: ignore[arg-type]
+            schema,
+            stock_id=uuid4(),
+            model_run_id=uuid4(),
+            language="de",
+        )
+        assert entity.is_error is False

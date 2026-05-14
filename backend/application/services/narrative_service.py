@@ -646,6 +646,7 @@ class NarrativeService:
             key_risks=list(schema.key_risks),
             confidence=schema.confidence,
             model_version=schema.model_version,
+            is_error=(schema.model_version == ERROR_FALLBACK_MODEL_VERSION),
         )
 
     def _try_validate_tool_response(self, response: Any) -> ResearchMemoSchema | None:
