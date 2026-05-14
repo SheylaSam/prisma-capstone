@@ -453,9 +453,7 @@ class TestExecuteBatchStaleCleanupRace:
     den Cleanup-Status.
     """
 
-    def _make_cleanup_scenario(
-        self, elapsed_seconds: int
-    ) -> tuple[AsyncMock, Any, Any]:
+    def _make_cleanup_scenario(self, elapsed_seconds: int) -> tuple[AsyncMock, Any, Any]:
         from datetime import timedelta
 
         from backend.domain.entities.memo_batch_job import MemoBatchJob
