@@ -1,7 +1,7 @@
 """Integration-Tests fuer /api/v1/memos/* via FastAPI-TestClient."""
 
-from decimal import Decimal
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 from unittest.mock import AsyncMock
 from uuid import uuid4
