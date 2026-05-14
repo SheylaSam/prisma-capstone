@@ -25,7 +25,7 @@ from backend.domain.repositories.research_memo_repository import ResearchMemoRep
 from backend.domain.repositories.stock_repository import StockRepository
 from backend.domain.repositories.universe_repository import UniverseRepository
 from backend.infrastructure.llm.client import LLMClient
-from backend.infrastructure.llm.pricing import PRICING
+from backend.infrastructure.llm.pricing import PRICING  # Single-Source-of-Truth via DI an LLMClient
 from backend.infrastructure.llm.prompts.prompt_loader import PromptTemplateLoader
 from backend.infrastructure.persistence.repositories.cost_log_repository import (
     SQLACostLogRepository,
@@ -54,7 +54,14 @@ from backend.infrastructure.providers.stub_market_data import StubMarketDataProv
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    """Liefert eine AsyncSession für den aktuellen Request-Scope."""
+    """Liefert eine AsyncSession für den aktuellen Request-Scope.
+
+    ACHTUNG: Der `async for`-Wrapper ist kein Versehen. Er durchreicht die
+    Generator-Cleanup-Semantik von get_async_session() (commit bei normalem
+    Exit, rollback bei Exception) an FastAPIs Dependency-Teardown. Den
+    Wrapper NICHT auf `async with` umstellen und kein Exception-Handling
+    hinzufügen, das Exceptions schluckt — sonst kein Rollback mehr.
+    """
     async for session in get_async_session():
         yield session
 
@@ -213,7 +220,12 @@ async def get_llm_client(
 ) -> LLMClient:
     """Erstellt den LLMClient-Wrapper. Voyage-Client ist None — wird nur für embed() benötigt,
     das von der Narrative-Engine nicht verwendet wird."""
-    return LLMClient(anthropic=anthropic_client, voyage=None, cost_tracker=cost_tracker)
+    return LLMClient(
+        anthropic=anthropic_client,
+        voyage=None,
+        cost_tracker=cost_tracker,
+        pricing=PRICING,
+    )
 
 
 async def get_research_memo_repository() -> ResearchMemoRepository:
