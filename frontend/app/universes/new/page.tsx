@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { XCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { createUniverse } from '@/lib/api/universes';
 
 export default function NewUniversePage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [region, setRegion] = useState('');
   const [tickersRaw, setTickersRaw] = useState('');
@@ -27,7 +28,10 @@ export default function NewUniversePage() {
           .map((t) => t.trim().toUpperCase())
           .filter(Boolean),
       }),
-    onSuccess: () => router.push('/universes'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['universes'] });
+      router.push('/universes');
+    },
   });
 
   function handleSubmit(e: React.FormEvent) {

@@ -17,12 +17,20 @@ class UniverseCreateRequest(BaseModel):
             raise ValueError("name darf nicht leer sein")
         return v
 
+    @field_validator("region")
+    @classmethod
+    def region_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("region darf nicht leer sein")
+        return v.strip().upper()
+
     @field_validator("tickers")
     @classmethod
     def tickers_not_empty(cls, v: list[str]) -> list[str]:
-        if not v:
-            raise ValueError("tickers darf nicht leer sein")
-        return v
+        cleaned = [t.strip() for t in v if t.strip()]
+        if not cleaned:
+            raise ValueError("tickers darf nicht leer oder nur Whitespace sein")
+        return cleaned
 
 
 class UniverseRead(BaseModel):

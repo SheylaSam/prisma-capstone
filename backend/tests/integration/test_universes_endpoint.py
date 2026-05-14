@@ -168,3 +168,19 @@ async def test_get_universe_unknown_id_returns_404(http_client: AsyncClient) -> 
     unknown = uuid.uuid4()
     response = await http_client.get(f"/api/v1/universes/{unknown}")
     assert response.status_code == 404
+
+
+async def test_create_universe_blank_region_returns_422(http_client: AsyncClient) -> None:
+    response = await http_client.post(
+        "/api/v1/universes",
+        json={"name": "Test", "region": "   ", "tickers": ["AAPL"]},
+    )
+    assert response.status_code == 422
+
+
+async def test_create_universe_blank_tickers_returns_422(http_client: AsyncClient) -> None:
+    response = await http_client.post(
+        "/api/v1/universes",
+        json={"name": "Test", "region": "US", "tickers": ["  ", ""]},
+    )
+    assert response.status_code == 422
