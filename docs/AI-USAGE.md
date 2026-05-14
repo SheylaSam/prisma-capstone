@@ -147,6 +147,19 @@ LLM-Code mit StubClient grün ≠ production-ready. Mindestens 1× gegen echte A
 - **Token-Kosten**: ~80k Tokens Opus 4.7 verteilt über Brainstorm + Plan + 8 Subagent-Executions + Cleanup-Operation; geschätzt ~$1.60 USD.
 - **Autor**: Sheyla Sampietro (mit Claude Code)
 
+## 2026-05-14 · Universe-Endpoints Review-Fixes + Merge-Conflict (Issue #47, PR #94)
+- **Agent**: Claude Code (Sonnet 4.6), Main-Context. Skills: `superpowers:receiving-code-review` (Befunde evaluiert vor Umsetzung).
+- **Scope**: Sheylas Review-Findings auf PR #94 adressiert — alle 3 Blocker + 1 Suggestion umgesetzt, 2 neue Backend-Tests geschrieben, Merge-Konflikt in `docs/AI-USAGE.md` aufgelöst. (1) **B1**: `useQueryClient` + `invalidateQueries(['universes'])` in `onSuccess` — neues Universum erscheint nach Redirect sofort in der Liste statt erst nach 30 s. (2) **B2**: `tickers_not_empty` filtert via `[t.strip() for t in v if t.strip()]` — Blank/Whitespace-Ticker → 422. (3) **B3**: `region_not_empty` Validator hinzugefügt — leere Region → 422, gültige Region wird stripped + uppercased. (4) **S1**: `client.ts` parst `body.detail` (FastAPI-Format, string oder `[{msg}]`) statt `body.error.message` — Backend-Fehlermeldungen im Frontend jetzt sichtbar. (5) Merge-Konflikt: beide neuen AI-USAGE-Einträge (RAG-Pipeline 2026-05-14 + Universe 2026-05-13) chronologisch behalten.
+- **Was gut lief**:
+  - **Alle Befunde vor Umsetzung gegen Branch verifiziert**: PR-Branch per `git fetch` + `git show` gelesen — jeder Bug wurde im echten Code bestätigt, nicht nur dem Review-Text vertraut. Verhindert Blindumsetzung falscher Suggestions.
+  - **14/14 Backend-Tests grün nach Fix**: Die 2 neuen Tests (`blank_region_returns_422`, `blank_tickers_returns_422`) haben B2/B3 sofort gefangen — kein Raten, ob die Validators greifen.
+  - **Merge-Konflikt ohne Datenverlust**: Beide AI-USAGE-Einträge behalten (nur die Einfüge-Position war konfliktiert), chronologisch korrekt sortiert. Keine inhaltliche Änderung an Sheylas RAG-Eintrag.
+- **Was nicht klappte**:
+  - **npm weiterhin nicht lokal verfügbar**: Frontend-Tests (`npm test`) konnten nach den Fixes nicht lokal verifiziert werden — Node/npm nicht im PATH der Shell-Session. B1 (TS-Änderung) und S1 (client.ts) sind typsicher und straightforward, aber ein lokaler Vitest-Run wäre sauberer gewesen.
+- **Lehre**: **`superpowers:receiving-code-review` vor jeder Review-Umsetzung**: Das Skill hat verhindert, externe Befunde blind zu übernehmen. Konkret war Sheylas B2-Fix (`cleaned = [...]`) technisch besser als Andreas Variante (`if any(not t.strip())`), weil sie gleichzeitig normiert und validiert. Ohne expliziten Verifikations-Schritt wäre womöglich der erste gesehene Fix übernommen worden.
+- **Token-Kosten**: ~15k Tokens Sonnet 4.6 (Plan-Mode-Exploration + 4 Datei-Edits + Test-Edit + Merge-Resolution); geschätzt ~0.15 USD.
+- **Autor**: Nicolas Lardinois (mit Claude Code)
+
 ## 2026-05-13 · Universe-REST-Endpoints + /universes Frontend-Seiten (Issue #47)
 - **Agent**: Claude Code (Sonnet 4.6), Main-Context. Skills: `superpowers:brainstorming` (Aufgaben-Analyse), `superpowers:writing-plans` (Plan-Datei in Plan-Mode), `superpowers:verification-before-completion` (vor PR-Erstellung).
 - **Scope**: Issue #47 geschlossen — vollständige Umsetzung in einem Zug: (1) Backend-REST-Layer (`GET/POST /api/v1/universes`, `GET /api/v1/universes/{id}`) mit `UniverseService`, Pydantic-Schemas, FastAPI-Router und Registrierung in `app.py`. (2) Frontend: `/universes`-Listenseite + `/universes/new`-Formular mit TanStack Query, Loading-Skeletons, Error-States (shadcn/ui). (3) **Vitest-Setup** als Ersteinrichtung für Frontend-Tests: `package.json`, `vitest.config.ts`, `vitest.setup.ts`, `@testing-library/react`, jsdom — plus 4 Komponenten-Tests für `UniverseList`. (4) Spec `docs/specs/2026-05-13-universe-endpoints-frontend.md` + CI-Update für `npm test`.
