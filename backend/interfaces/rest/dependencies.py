@@ -6,8 +6,6 @@ from collections.abc import AsyncGenerator
 from functools import lru_cache
 from typing import Any
 
-_logger = logging.getLogger(__name__)
-
 import anthropic
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,6 +52,8 @@ from backend.infrastructure.persistence.session import (
 )
 from backend.infrastructure.providers.stub_fundamentals import StubFundamentalsProvider
 from backend.infrastructure.providers.stub_market_data import StubMarketDataProvider
+
+_logger = logging.getLogger(__name__)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
