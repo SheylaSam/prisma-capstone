@@ -76,29 +76,18 @@ async def test_no_weights_omits_weight_config() -> None:
 
 
 @pytest.mark.asyncio
-async def test_weights_not_summing_to_one_raises() -> None:
+async def test_invalid_weights_forwarded_to_backend() -> None:
+    """Gewicht-Validierung delegiert ans Backend — payload wird ohne lokalen Check gesendet."""
     client = _mock_client()
-    with pytest.raises(ValueError, match="1.0"):
-        await run_ranking(client, universe_id=_UNIVERSE_ID, weights={"quality_classic": 0.5})
+    await run_ranking(client, universe_id=_UNIVERSE_ID, weights={"quality_classic": 0.5})
+    call_args = client.post.call_args
+    assert call_args.kwargs["json"]["weight_config"] == {"quality_classic": 0.5}
 
 
 @pytest.mark.asyncio
-async def test_invalid_uuid_raises() -> None:
-    client = _mock_client()
-    with pytest.raises(ValueError):
-        await run_ranking(client, universe_id="not-a-uuid")
-
-
-@pytest.mark.asyncio
-async def test_total_rank_none_sorted_last() -> None:
-    rankings_with_none: list[dict[str, Any]] = [
-        {
-            "ticker": "X",
-            "total_rank": None,
-            "weighted_avg": None,
-            "is_sweet_spot": False,
-            "per_model_ranks": {},
-        },
+async def test_backend_order_preserved_in_top10() -> None:
+    """Backend liefert Rankings sortiert — MCP-Tool übernimmt diese Reihenfolge."""
+    pre_sorted: list[dict[str, Any]] = [
         {
             "ticker": "AAPL",
             "total_rank": 1,
@@ -106,8 +95,15 @@ async def test_total_rank_none_sorted_last() -> None:
             "is_sweet_spot": True,
             "per_model_ranks": {},
         },
+        {
+            "ticker": "X",
+            "total_rank": None,
+            "weighted_avg": None,
+            "is_sweet_spot": False,
+            "per_model_ranks": {},
+        },
     ]
-    client = _mock_client(rankings=rankings_with_none)
+    client = _mock_client(rankings=pre_sorted)
     result = await run_ranking(client, universe_id=_UNIVERSE_ID)
 
     assert result["top_10_summary"][0]["ticker"] == "AAPL"

@@ -163,7 +163,7 @@ async def require_api_key(
     """Opt-in X-API-Key-Guard für MCP-Tool-Endpoints (z.B. POST /api/v1/runs).
 
     Wenn tool_api_key leer ist (default), kein Enforcement — bestehende Aufrufer
-    ohne Header werden nicht gebrochen. Sobald PRISMA_TOOL_API_KEY gesetzt ist,
+    ohne Header werden nicht gebrochen. Sobald TOOL_API_KEY gesetzt ist,
     muss der Header exakt übereinstimmen.
     """
     if not settings.tool_api_key:
