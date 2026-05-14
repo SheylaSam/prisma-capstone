@@ -216,6 +216,7 @@ async def test_full_pipeline_en(
     stub = StubAnthropicClient([FIXTURES / "top_quality_stock_en.json"])
     cost_tracker = CostTracker(
         repository=SQLACostLogRepository(session_factory),
+        pricing=PRICING,
         cap_usd=Decimal("20"),
     )
     async with session_factory() as session:
