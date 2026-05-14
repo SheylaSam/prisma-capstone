@@ -75,3 +75,20 @@ def test_render_de_system_template_succeeds() -> None:
     assert "quantitativer Research-Analyst" in rendered
     assert "submit_memo" in rendered
     assert "Sweet Spot" in rendered
+
+
+def test_de_system_prompt_few_shot_has_no_score_values() -> None:
+    """Issue #66: Few-Shot-Beispiel im System-Prompt darf keine erfundenen
+    Score-Werte enthalten — sonst trainiert die LLM auf Score-Wording."""
+    loader = PromptTemplateLoader()
+    rendered = loader.render("narrative_system.de.md.j2", {})
+    for forbidden in [
+        "Score 0.87",
+        "Score 0.74",
+        "Score 0.62",
+        "Score 0.31",
+        "Score 0.91",
+    ]:
+        assert forbidden not in rendered, f"System-Prompt enthält noch {forbidden!r}"
+    assert "Quality Classic" in rendered
+    assert "Rang" in rendered
