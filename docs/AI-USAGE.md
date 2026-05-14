@@ -498,7 +498,7 @@ LLM-Code mit StubClient grün ≠ production-ready. Mindestens 1× gegen echte A
 - **Lektion**: Agents produzieren syntaktisch plausiblen, aber real nicht funktionalen Code wenn es um seltene Infrastruktur-Detail-APIs geht (Dockerfile-vs-Shell-Unterschied, pydantic-settings v2 quirks, obscure Build-Backend-Namen). TDD-Prinzip gilt auch für Infrastruktur: **erstmal bauen + hochfahren + anfragen, bevor man den nächsten Layer draufsetzt**. Alles grün erst nach Verifikation.
 - **Autor**: Sheyla Sampietro (mit Claude Code + Sub-Agents)
 
-## 2026-05-12 · fix(frontend): Rankings nav-link /universes → /rankings (#80)
+## 2026-05-12 · fix(frontend): Rankings nav-link /universes → /rankings (#51)
 - **Agent**: Claude Code (Sonnet 4.6) — superpowers:writing-plans + inline Execution
 - **Scope**: Issue #51 behoben: falscher `href='/universes'` im Rankings-Nav-Link korrigiert, Route-Konstanten in `lib/routes.ts` zentralisiert, Placeholder-Seite `/rankings` erstellt.
 - **Was gut lief**: Plan + Exploration via parallele Explore-Agents war effizient — Dateipfad und Bug-Zeile wurden sofort identifiziert. AskUserQuestion half, zwei Ansätze (Href-Fix vs. Disabled+Tooltip) strukturiert mit dem User zu klären, bevor Code entstand. Alle 3 Commits + PR in einem Rutsch.
