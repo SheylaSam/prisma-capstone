@@ -126,10 +126,10 @@ jobs:
     needs: [frontend-build]
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: prisma
+          POSTGRES_PASSWORD: prisma
           POSTGRES_DB: prisma_test
         ports:
           - 5432:5432
@@ -139,7 +139,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/prisma_test
+      DATABASE_URL: postgresql://prisma:prisma@localhost:5432/prisma_test
       E2E_API_BASE_URL: http://localhost:8000
       NEXT_PUBLIC_API_URL: http://localhost:8000
       PLAYWRIGHT_NO_WEBSERVER: "1"
