@@ -26,7 +26,10 @@ export default function RankingDetailPage({ params }: { params: { runId: string 
   const runQuery = useQuery({
     queryKey: ['run', params.runId],
     queryFn: () => getRun(params.runId),
-    refetchInterval: (q) => (q.state.data?.status === 'running' ? 5000 : false),
+    refetchInterval: (q) => {
+      const status = q.state.data?.status;
+      return status === 'pending' || status === 'running' ? 5000 : false;
+    },
     retry: (failureCount, error) => {
       if (error instanceof ApiError && error.status === 404) return false;
       return failureCount < 2;
@@ -42,7 +45,7 @@ export default function RankingDetailPage({ params }: { params: { runId: string 
   });
 
   const universeQuery = useQuery({
-    queryKey: ['universe', runQuery.data?.universe_id],
+    queryKey: ['universe', runQuery.data?.universe_id ?? null],
     queryFn: () => getUniverse(runQuery.data!.universe_id),
     enabled: !!runQuery.data?.universe_id,
   });
@@ -93,7 +96,7 @@ export default function RankingDetailPage({ params }: { params: { runId: string 
         </Card>
       )}
 
-      {runQuery.data?.status === 'running' && (
+      {(runQuery.data?.status === 'pending' || runQuery.data?.status === 'running') && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
           <span>Run läuft noch. Seite aktualisiert sich alle 5s.</span>
         </div>
