@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 
+import { createTestUniverse } from './fixtures';
+
 test.describe('PRISMA E2E', () => {
   test('1. Startseite lädt und zeigt Navigation', async ({ page }) => {
     await page.goto('/');
@@ -23,7 +25,6 @@ test.describe('PRISMA E2E', () => {
   });
 
   test('3. Ranking-Flow: Run starten und Ergebnis-Tabelle sehen', async ({ page }) => {
-    const { createTestUniverse } = await import('./fixtures');
     const universe = await createTestUniverse(`run-${Date.now()}`);
 
     await page.goto('/rankings');
