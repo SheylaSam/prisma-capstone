@@ -74,7 +74,7 @@ class TestPortfolioMetrics:
     def test_immutability(self) -> None:
         metrics = _make_metrics()
         with pytest.raises(ValidationError):
-            metrics.total_return = Decimal("0.20")  # type: ignore[union-attr]
+            metrics.total_return = Decimal("0.20")
 
 
 class TestBacktestSeries:
@@ -94,7 +94,7 @@ class TestBacktestSeries:
     def test_immutability(self) -> None:
         series = _make_series()
         with pytest.raises(ValidationError):
-            series.dates = [date(2024, 1, 1)]  # type: ignore[misc]
+            series.dates = [date(2024, 1, 1)]
 
 
 class TestBacktestResult:
@@ -120,4 +120,4 @@ class TestBacktestResult:
     def test_immutability(self) -> None:
         result = _make_result()
         with pytest.raises(ValidationError):
-            result.top_n = 5  # type: ignore[union-attr]
+            result.top_n = 5
