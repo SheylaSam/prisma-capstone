@@ -10,6 +10,7 @@ from fastapi import Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.application.services.cost_tracker import CostTracker
+from backend.application.services.factsheet_service import FactsheetService
 from backend.application.services.narrative_service import NarrativeService
 from backend.application.services.ranking_run_service import RankingRunService
 from backend.application.services.stock_service import StockService
@@ -24,7 +25,7 @@ from backend.domain.repositories.research_memo_repository import ResearchMemoRep
 from backend.domain.repositories.stock_repository import StockRepository
 from backend.domain.repositories.universe_repository import UniverseRepository
 from backend.infrastructure.llm.client import LLMClient
-from backend.infrastructure.llm.pricing import PRICING
+from backend.infrastructure.llm.pricing import PRICING  # Single-Source-of-Truth via DI an LLMClient
 from backend.infrastructure.llm.prompts.prompt_loader import PromptTemplateLoader
 from backend.infrastructure.persistence.repositories.cost_log_repository import (
     SQLACostLogRepository,
@@ -53,7 +54,14 @@ from backend.infrastructure.providers.stub_market_data import StubMarketDataProv
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    """Liefert eine AsyncSession für den aktuellen Request-Scope."""
+    """Liefert eine AsyncSession für den aktuellen Request-Scope.
+
+    ACHTUNG: Der `async for`-Wrapper ist kein Versehen. Er durchreicht die
+    Generator-Cleanup-Semantik von get_async_session() (commit bei normalem
+    Exit, rollback bei Exception) an FastAPIs Dependency-Teardown. Den
+    Wrapper NICHT auf `async with` umstellen und kein Exception-Handling
+    hinzufügen, das Exceptions schluckt — sonst kein Rollback mehr.
+    """
     async for session in get_async_session():
         yield session
 
@@ -114,6 +122,13 @@ async def get_ranking_run_repository(
     return SQLARankingRunRepository(session=session)
 
 
+async def get_factsheet_service(
+    stock_repo: StockRepository = Depends(get_stock_repository),
+    run_repo: RankingRunRepository = Depends(get_ranking_run_repository),
+) -> FactsheetService:
+    return FactsheetService(stock_repo=stock_repo, run_repo=run_repo)
+
+
 async def get_fundamentals_provider() -> FundamentalsProvider:
     return StubFundamentalsProvider()
 
@@ -156,6 +171,22 @@ async def require_admin_api_key(
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 
+async def require_api_key(
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    settings: Settings = Depends(get_settings),
+) -> None:
+    """Opt-in X-API-Key-Guard für MCP-Tool-Endpoints (z.B. POST /api/v1/runs).
+
+    Wenn tool_api_key leer ist (default), kein Enforcement — bestehende Aufrufer
+    ohne Header werden nicht gebrochen. Sobald TOOL_API_KEY gesetzt ist,
+    muss der Header exakt übereinstimmen.
+    """
+    if not settings.tool_api_key:
+        return
+    if x_api_key is None or not hmac.compare_digest(x_api_key, settings.tool_api_key):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+
 # ---------------------------------------------------------------------------
 # NarrativeService DI-Chain
 # ---------------------------------------------------------------------------
@@ -167,15 +198,15 @@ def get_prompt_loader() -> PromptTemplateLoader:
     return PromptTemplateLoader()
 
 
-async def get_anthropic_client(
-    settings: Settings = Depends(get_settings),
-) -> Any:
-    """Instanziiert den Anthropic AsyncAnthropic-Client mit Spec-konformen Timeouts.
+@lru_cache(maxsize=1)
+def get_anthropic_client() -> Any:
+    """Singleton — AsyncAnthropic öffnet einen httpx-Connection-Pool.
 
-    Spec §7 (Single-Memo-Slice): `timeout=30.0`, `max_retries=3`. SDK-Defaults
-    sind 10-Minuten-Timeout / 2 Retries — bei langsam-antwortender API blockiert
-    ein FastAPI-Worker sonst 10 Minuten pro Call.
+    Pro-Request-Instanziierung würde bei jeder API-Anfrage einen frischen Pool
+    aufbauen und sofort verwerfen (Issue #68 / PR #64 W4). lru_cache analog
+    get_prompt_loader(). Spec §7: timeout=30s, max_retries=3.
     """
+    settings = get_settings()
     return anthropic.AsyncAnthropic(
         api_key=settings.anthropic_api_key,
         timeout=30.0,
@@ -184,12 +215,16 @@ async def get_anthropic_client(
 
 
 async def get_llm_client(
-    anthropic_client: Any = Depends(get_anthropic_client),
     cost_tracker: CostTracker = Depends(get_cost_tracker),
 ) -> LLMClient:
     """Erstellt den LLMClient-Wrapper. Voyage-Client ist None — wird nur für embed() benötigt,
     das von der Narrative-Engine nicht verwendet wird."""
-    return LLMClient(anthropic=anthropic_client, voyage=None, cost_tracker=cost_tracker)
+    return LLMClient(
+        anthropic=get_anthropic_client(),
+        voyage=None,
+        cost_tracker=cost_tracker,
+        pricing=PRICING,
+    )
 
 
 async def get_research_memo_repository() -> ResearchMemoRepository:

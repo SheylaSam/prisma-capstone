@@ -101,13 +101,15 @@ def _stringify(obj: Any) -> dict[str, Any]:
     return {"_repr": repr(obj)}
 
 
-def _rankings_for_template(ranking: dict[str, Any]) -> dict[str, dict[str, float | int]]:
-    """Wandelt das per_model_ranks-Dict + weighted_avg in ein
-    Template-freundliches dict[name, {rank, score}]-Format um.
+def _rankings_for_template(ranking: dict[str, Any]) -> dict[str, dict[str, int]]:
+    """Wandelt das per_model_ranks-Dict in ein Template-freundliches
+    dict[name, {rank}]-Format um.
 
-    Score-Daten sind zu diesem Zeitpunkt nicht alle in den Run-Results,
-    daher Score = 1 / rank als grobe Visualisierung. Spec sagt nichts
-    Strenges dazu, das Template zeigt nur eine Sichtbarmachung.
+    Score-Werte werden bewusst NICHT mitgeführt: vor Issue #66 wurde
+    score = 1 / rank als Proxy berechnet, was die LLM als echte
+    quantitative Aussage interpretiert hat (Hallucination-Quelle).
+    Sobald echte per-Modell-Scores in Run-Results landen, kann der
+    Slot reaktiviert werden.
     """
     model_label = {
         "quality_classic": "Quality Classic",
@@ -116,12 +118,12 @@ def _rankings_for_template(ranking: dict[str, Any]) -> dict[str, dict[str, float
         "value_alpha_potential": "Value Alpha Potential",
         "diversification": "Diversification",
     }
-    out: dict[str, dict[str, float | int]] = {}
+    out: dict[str, dict[str, int]] = {}
     per_model = ranking.get("per_model_ranks") or {}
     for key, label in model_label.items():
         rank = per_model.get(key)
         if rank is not None:
-            out[label] = {"rank": int(rank), "score": round(1.0 / max(int(rank), 1), 4)}
+            out[label] = {"rank": int(rank)}
     return out
 
 
@@ -200,12 +202,6 @@ class NarrativeService:
         language: Literal["de", "en"] = "de",
     ) -> MemoBatchJob:
         """Validiert Run, erstellt Job, spawned Background-Task, returnt sofort."""
-        # EN-Guard
-        if language == "en":
-            raise NotImplementedError(
-                "EN-Memos sind in dieser Slice noch nicht implementiert. "
-                "Bitte language='de' nutzen."
-            )
         # top_n-Bounds
         if not (1 <= top_n <= 100):
             raise ValueError(f"top_n must be 1..100, got {top_n}")
@@ -526,15 +522,6 @@ class NarrativeService:
         (_execute_batch in Task 8) nutzt isolated Repos via session_factory
         pro Worker (B1-Lehre — geteilte AsyncSession ist nicht concurrent-safe).
         """
-        # Guard: EN-Template ist Stub (siehe narrative_system.en.md.j2).
-        # Frueher Bail-Out verhindert Token-Verbrauch fuer Garbage-Prompt.
-        # Wird entfernt sobald EN-Template gefuellt ist (Folge-PR).
-        if language == "en":
-            raise NotImplementedError(
-                "EN-Memos sind in dieser Slice noch nicht implementiert "
-                "(narrative_system.en.md.j2 ist Stub). Bitte language='de' nutzen."
-            )
-
         # 1. Cache check
         if not force_regenerate:
             existing = await self._memo_repo.get(stock_id, model_run_id, language=language)
@@ -562,7 +549,7 @@ class NarrativeService:
         # 3. Prompts rendern
         system_prompt = self._prompts.render(f"narrative_system.{language}.md.j2", {})
         user_prompt = self._prompts.render(
-            "narrative_user.md.j2",
+            f"narrative_user.{language}.md.j2",
             {
                 "ticker": stock.ticker,
                 "name": stock.name,
@@ -661,6 +648,7 @@ class NarrativeService:
             key_risks=list(schema.key_risks),
             confidence=schema.confidence,
             model_version=schema.model_version,
+            is_error=(schema.model_version == ERROR_FALLBACK_MODEL_VERSION),
         )
 
     def _try_validate_tool_response(self, response: Any) -> ResearchMemoSchema | None:
