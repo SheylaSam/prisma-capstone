@@ -360,9 +360,10 @@ frontend-e2e:
 
 ---
 
-## Open Questions (für Implementation-Plan zu klären)
+## Open Questions
 
-1. **Stub-Provider-Aktivierung in CI:** Welche ENV-Variable schaltet `RankingRunService` auf `StubFundamentalsProvider` und `StubMarketDataProvider`? Im Plan-Phase via `grep -rn "Stub.*Provider" backend/` + `backend/config/settings.py` verifizieren. Falls keine existiert: minimaler Backend-Vor-PR oder Inline-Override im CI-ENV.
-2. **Universe-Name auf Detail-Page:** `getUniverse(run.universe_id)` parallel via `useQuery` (kein Backend-Change). Bestätigt während Brainstorming.
+Alle während Brainstorming + Self-Review aufgelöst:
 
-(Open Question zu Backend-Entry-Point während Self-Review aufgelöst: `backend.interfaces.rest.main:app` verifiziert in `backend/interfaces/rest/main.py:5`.)
+1. **Backend-Entry-Point:** `backend.interfaces.rest.main:app` verifiziert in `backend/interfaces/rest/main.py:5`.
+2. **Stub-Provider-Aktivierung:** Backend nutzt aktuell **immer** Stubs (hardcoded in `backend/interfaces/rest/dependencies.py:132-137`). Keine ENV-Variable nötig — CI braucht nur Backend starten. *(Side-Note, nicht Teil dieser Spec: Production hat ebenfalls keine echten Data-Provider — separates Issue.)*
+3. **Universe-Name auf Detail-Page:** `getUniverse(run.universe_id)` parallel via `useQuery`, kein Backend-Change.
