@@ -21,4 +21,27 @@ test.describe('PRISMA E2E', () => {
     await expect(page).toHaveURL(/\/universes$/);
     await expect(page.getByText(`e2e-flow-${suffix}`)).toBeVisible({ timeout: 10_000 });
   });
+
+  test('3. Ranking-Flow: Run starten und Ergebnis-Tabelle sehen', async ({ page }) => {
+    const { createTestUniverse } = await import('./fixtures');
+    const universe = await createTestUniverse(`run-${Date.now()}`);
+
+    await page.goto('/rankings');
+    await expect(page.getByRole('heading', { name: /Ranking starten/i })).toBeVisible();
+
+    await page.getByLabel('Universe').selectOption(universe.id);
+    await page.getByRole('button', { name: /Run starten/i }).click();
+
+    await expect(page).toHaveURL(/\/rankings\/[0-9a-f-]+$/, { timeout: 90_000 });
+    await expect(page.getByRole('heading', { name: /Ranking-Ergebnis/i })).toBeVisible();
+
+    // Mindestens eine Datenzeile (Header + ≥1 Body-Row)
+    const rows = page.locator('tbody tr');
+    await expect(rows.first()).toBeVisible({ timeout: 60_000 });
+    expect(await rows.count()).toBeGreaterThanOrEqual(1);
+
+    // Erste Ticker-Spalte enthält einen unserer Test-Tickers
+    const firstTickerCell = page.locator('tbody tr td.font-mono').first();
+    await expect(firstTickerCell).toHaveText(/^(AAPL|MSFT|GOOGL)$/);
+  });
 });
