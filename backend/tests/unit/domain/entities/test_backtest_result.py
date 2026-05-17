@@ -5,6 +5,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from backend.domain.entities.backtest_result import (
     BacktestResult,
@@ -72,7 +73,7 @@ class TestPortfolioMetrics:
 
     def test_immutability(self) -> None:
         metrics = _make_metrics()
-        with pytest.raises(TypeError):
+        with pytest.raises(ValidationError):
             metrics.total_return = Decimal("0.20")  # type: ignore[union-attr]
 
 
@@ -92,7 +93,7 @@ class TestBacktestSeries:
 
     def test_immutability(self) -> None:
         series = _make_series()
-        with pytest.raises(TypeError):
+        with pytest.raises(ValidationError):
             series.dates = [date(2024, 1, 1)]  # type: ignore[misc]
 
 
@@ -118,5 +119,5 @@ class TestBacktestResult:
 
     def test_immutability(self) -> None:
         result = _make_result()
-        with pytest.raises(TypeError):
+        with pytest.raises(ValidationError):
             result.top_n = 5  # type: ignore[union-attr]
