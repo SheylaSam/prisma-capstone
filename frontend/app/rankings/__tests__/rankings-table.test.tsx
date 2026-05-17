@@ -134,8 +134,9 @@ describe('RankingsTable', () => {
     const mockUrl = 'blob:mock-url';
     const mockRevoke = vi.fn();
 
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue(mockUrl);
-    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(mockRevoke);
+    // jsdom does not implement URL.createObjectURL — assign directly
+    global.URL.createObjectURL = vi.fn().mockReturnValue(mockUrl);
+    global.URL.revokeObjectURL = mockRevoke;
 
     // Use a real anchor so appendChild/removeChild work in jsdom
     const mockAnchor = document.createElement('a');
@@ -154,5 +155,7 @@ describe('RankingsTable', () => {
     expect(mockRevoke).toHaveBeenCalledWith(mockUrl);
 
     vi.restoreAllMocks();
+    Reflect.deleteProperty(global.URL, 'createObjectURL');
+    Reflect.deleteProperty(global.URL, 'revokeObjectURL');
   });
 });
