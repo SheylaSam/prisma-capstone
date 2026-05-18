@@ -6,11 +6,6 @@ from typing import Any
 from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
-# Relative Daten: immer im gültigen Fenster von StubMarketDataProvider (~2 Jahre).
-_today = date.today()
-_BACKTEST_START = date(_today.year - 1, 1, 1)
-_BACKTEST_END = date(_today.year - 1, 12, 31)
-
 import pytest
 
 from backend.application.services.backtest_service import (
@@ -27,6 +22,11 @@ from backend.domain.repositories.universe_repository import UniverseRepository
 from backend.infrastructure.providers.stub_market_data import StubMarketDataProvider
 
 pytestmark = pytest.mark.unit
+
+# Relative Daten: immer im gültigen Fenster von StubMarketDataProvider (~2 Jahre).
+_today = date.today()
+_BACKTEST_START = date(_today.year - 1, 1, 1)
+_BACKTEST_END = date(_today.year - 1, 12, 31)
 
 
 # ── In-memory fake repository ──────────────────────────────────────────────
