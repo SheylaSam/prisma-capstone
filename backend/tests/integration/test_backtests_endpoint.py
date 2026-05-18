@@ -27,9 +27,9 @@ pytestmark = pytest.mark.integration
 # ── Constants ─────────────────────────────────────────────────────────────
 
 _TICKERS = ["AAPL", "GOOGL", "MSFT"]
-_STUB_END = pd.Timestamp("2026-05-09", tz="UTC")
 
 _today = date.today()
+_STUB_END = pd.Timestamp(date(_today.year, _today.month, _today.day), tz="UTC")
 _BACKTEST_START = date(_today.year - 1, 1, 1)
 _BACKTEST_END = date(_today.year - 1, 6, 30)
 
