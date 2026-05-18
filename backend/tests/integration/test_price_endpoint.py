@@ -9,7 +9,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from backend.application.services.stock_service import StockNotFound, StockService
+from backend.application.services.stock_service import StockService
 from backend.domain.entities.stock import Stock
 from backend.domain.repositories.stock_repository import StockRepository
 from backend.infrastructure.providers.stub_market_data import StubMarketDataProvider

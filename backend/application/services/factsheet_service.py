@@ -2,10 +2,10 @@
 
 from typing import Any
 
+from backend.application.services.stock_service import StockNotFound
 from backend.domain.entities.stock import Stock
 from backend.domain.repositories.ranking_run_repository import RankingRunRepository
 from backend.domain.repositories.stock_repository import StockRepository
-from backend.application.services.stock_service import StockNotFound  # moved here
 
 
 class FactsheetService:
