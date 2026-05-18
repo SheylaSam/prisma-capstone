@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -7,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { ROUTES } from '@/lib/routes';
 import type { RankingItem } from '@/lib/api/runs';
 
 const MODEL_COLUMNS: Array<{ key: string; label: string }> = [
@@ -22,7 +25,13 @@ function formatNumber(value: number | null, digits = 0): string {
   return digits === 0 ? String(value) : value.toFixed(digits);
 }
 
-export function RankingsTable({ items }: { items: RankingItem[] }) {
+export function RankingsTable({
+  items,
+  runId,
+}: {
+  items: RankingItem[];
+  runId: string;
+}) {
   if (items.length === 0) {
     return (
       <div className="py-12 text-center text-sm text-muted-foreground">Keine Ergebnisse</div>
@@ -44,15 +53,34 @@ export function RankingsTable({ items }: { items: RankingItem[] }) {
       </TableHeader>
       <TableBody>
         {items.map((item) => (
-          <TableRow key={item.ticker}>
-            <TableCell>{formatNumber(item.total_rank)}</TableCell>
-            <TableCell className="font-mono">{item.ticker}</TableCell>
+          <TableRow
+            key={item.ticker}
+            className="cursor-pointer hover:bg-muted/50"
+          >
+            <TableCell>
+              <Link
+                href={ROUTES.factsheet(runId, item.ticker)}
+                className="block w-full"
+              >
+                {formatNumber(item.total_rank)}
+              </Link>
+            </TableCell>
+            <TableCell>
+              <Link
+                href={ROUTES.factsheet(runId, item.ticker)}
+                className="block w-full font-mono"
+              >
+                {item.ticker}
+              </Link>
+            </TableCell>
             <TableCell>{formatNumber(item.weighted_avg, 2)}</TableCell>
             <TableCell>
               {item.is_sweet_spot ? <Badge variant="default">★</Badge> : null}
             </TableCell>
             {MODEL_COLUMNS.map((col) => (
-              <TableCell key={col.key}>{formatNumber(item.per_model_ranks[col.key] ?? null)}</TableCell>
+              <TableCell key={col.key}>
+                {formatNumber(item.per_model_ranks[col.key] ?? null)}
+              </TableCell>
             ))}
           </TableRow>
         ))}

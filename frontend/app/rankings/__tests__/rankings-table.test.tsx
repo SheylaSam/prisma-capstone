@@ -35,25 +35,25 @@ const sampleItems: RankingItem[] = [
 
 describe('RankingsTable', () => {
   it('rendert eine Zeile pro Item', () => {
-    render(<RankingsTable items={sampleItems} />);
+    render(<RankingsTable items={sampleItems} runId="test-run-id" />);
     expect(screen.getByText('AAPL')).toBeInTheDocument();
     expect(screen.getByText('MSFT')).toBeInTheDocument();
   });
 
   it('zeigt Sweet-Spot-Badge nur wenn is_sweet_spot=true', () => {
-    render(<RankingsTable items={sampleItems} />);
+    render(<RankingsTable items={sampleItems} runId="test-run-id" />);
     const badges = screen.queryAllByText('★');
     expect(badges).toHaveLength(1);
   });
 
   it('zeigt em-dash für null-Werte', () => {
-    render(<RankingsTable items={sampleItems} />);
+    render(<RankingsTable items={sampleItems} runId="test-run-id" />);
     const dashes = screen.queryAllByText('—');
     expect(dashes.length).toBeGreaterThanOrEqual(1);
   });
 
   it('rendert Modell-Spalten in fixer Reihenfolge', () => {
-    render(<RankingsTable items={sampleItems} />);
+    render(<RankingsTable items={sampleItems} runId="test-run-id" />);
     const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
     expect(headers).toEqual([
       '#',
@@ -69,7 +69,7 @@ describe('RankingsTable', () => {
   });
 
   it('zeigt Empty-State wenn items leer', () => {
-    render(<RankingsTable items={[]} />);
+    render(<RankingsTable items={[]} runId="test-run-id" />);
     expect(screen.getByText(/Keine Ergebnisse/)).toBeInTheDocument();
   });
 });
