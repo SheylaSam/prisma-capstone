@@ -190,11 +190,8 @@ export function RankingsTable({ items, runId }: { items: RankingItem[]; runId: s
                     {formatNumber(item.total_rank)}
                   </Link>
                 </TableCell>
-                <TableCell>
-                  <Link
-                    href={ROUTES.factsheet(runId, item.ticker)}
-                    className="block w-full font-mono"
-                  >
+                <TableCell className="font-mono">
+                  <Link href={ROUTES.factsheet(runId, item.ticker)} className="block w-full">
                     {item.ticker}
                   </Link>
                 </TableCell>

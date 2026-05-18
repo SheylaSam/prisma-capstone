@@ -68,5 +68,5 @@ async def get_prices(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return PriceSeriesResponse(
         ticker=ticker_upper,
-        prices=[PricePoint(date=p["date"], close=p["close"]) for p in prices],
+        prices=[PricePoint(date=str(p["date"]), close=float(p["close"])) for p in prices],
     )

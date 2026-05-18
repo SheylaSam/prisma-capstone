@@ -46,7 +46,7 @@ class StockService:
         self,
         ticker: str,
         days: int = 252,
-    ) -> tuple[str, list[dict[str, object]]]:
+    ) -> tuple[str, list[dict[str, str | float]]]:
         """Gibt Preiszeitreihe für einen Ticker zurück (letzte `days` Handelstage).
 
         Args:
