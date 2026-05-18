@@ -184,3 +184,36 @@ async def test_create_universe_blank_tickers_returns_422(http_client: AsyncClien
         json={"name": "Test", "region": "US", "tickers": ["  ", ""]},
     )
     assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Tests: POST /api/v1/universes/{id}/sync
+# ---------------------------------------------------------------------------
+
+
+async def test_sync_universe_returns_200(http_client: AsyncClient) -> None:
+    response = await http_client.post(f"/api/v1/universes/{_SMI_ID}/sync")
+    assert response.status_code == 200
+
+
+async def test_sync_universe_response_has_expected_fields(http_client: AsyncClient) -> None:
+    body = (await http_client.post(f"/api/v1/universes/{_SP500_ID}/sync")).json()
+    assert "universe_id" in body
+    assert "synced_count" in body
+    assert "failed_tickers" in body
+
+
+async def test_sync_universe_returns_correct_universe_id(http_client: AsyncClient) -> None:
+    body = (await http_client.post(f"/api/v1/universes/{_SMI_ID}/sync")).json()
+    assert body["universe_id"] == str(_SMI_ID)
+
+
+async def test_sync_universe_unknown_id_returns_404(http_client: AsyncClient) -> None:
+    response = await http_client.post(f"/api/v1/universes/{uuid.uuid4()}/sync")
+    assert response.status_code == 404
+
+
+async def test_sync_universe_synced_count_equals_ticker_count(http_client: AsyncClient) -> None:
+    body = (await http_client.post(f"/api/v1/universes/{_SMI_ID}/sync")).json()
+    # StubFundamentalsProvider and StubMarketDataProvider cover all tickers
+    assert body["synced_count"] + len(body["failed_tickers"]) == 3  # SMI has 3 tickers

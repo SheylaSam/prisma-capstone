@@ -45,3 +45,9 @@ class UniverseRead(BaseModel):
 class UniverseListResponse(BaseModel):
     items: list[UniverseRead]
     total: int
+
+
+class UniverseSyncResponse(BaseModel):
+    universe_id: UUID
+    synced_count: int
+    failed_tickers: list[str]
