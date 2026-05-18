@@ -14,16 +14,17 @@ test("Ranking-Lauf starten und Tabelle mit 5 Zeilen anzeigen", async ({ page, re
   expect(universeResp.ok()).toBeTruthy();
   const universe = await universeResp.json();
 
-  await page.goto(`/rankings?universe_id=${universe.id}`);
+  await page.goto("/rankings");
 
-  // Click "Ranking starten"
-  await page.getByTestId("start-ranking-btn").click();
+  // Select universe from dropdown and start run
+  await page.getByLabel("Universe").selectOption(universe.id);
+  await page.getByRole("button", { name: /Run starten/i }).click();
 
-  // Wait for table to appear
-  const table = page.getByTestId("rankings-table");
-  await expect(table).toBeVisible({ timeout: 30_000 });
+  // Should navigate to the run detail page
+  await expect(page).toHaveURL(/\/rankings\/[0-9a-f-]+$/, { timeout: 90_000 });
 
   // Verify exactly 5 rows in tbody
-  const rows = table.locator("tbody tr");
+  const rows = page.locator("tbody tr");
+  await expect(rows.first()).toBeVisible({ timeout: 60_000 });
   await expect(rows).toHaveCount(5);
 });
