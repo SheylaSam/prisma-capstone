@@ -45,7 +45,7 @@ class StockFactsheet(BaseModel):
 class PricePoint(BaseModel):
     """Ein Datenpunkt in einer Preiszeitreihe."""
 
-    date: str    # ISO-8601, z.B. "2025-05-18"
+    date: str  # ISO-8601, z.B. "2025-05-18"
     close: float
 
 
