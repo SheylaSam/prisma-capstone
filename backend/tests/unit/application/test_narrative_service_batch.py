@@ -13,11 +13,15 @@ from backend.application.services.narrative_service import NarrativeService
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
 
-def _make_validation_mocks(run_results: Any) -> tuple[Mock, Mock, AsyncMock]:
-    """Helper fuer start_batch-Tests: session_factory + run_repo_factory.
+def _make_validation_mocks(
+    run_results: Any,
+    stocks: list[tuple[UUID, str]] | None = None,
+) -> tuple[Mock, Mock, Mock, AsyncMock, AsyncMock]:
+    """Helper fuer start_batch-Tests: session_factory + run_repo_factory + stock_repo_factory.
 
-    start_batch validiert den Run via Factory + frische Session (PR #70 W4-Fix:
-    Background-Setup darf nicht von der Request-Session abhaengen).
+    start_batch validiert den Run via Factory + frische Session (PR #70 W4-Fix)
+    und loest seit Issue #86 auch Ticker → Stock-IDs auf (im selben Kontext).
+    stocks: Liste von (UUID, ticker) — wenn None, gibt list_by_tickers [] zurueck.
     """
     mock_session_cm = AsyncMock()
     mock_session_cm.__aenter__ = AsyncMock(return_value=AsyncMock())
@@ -28,7 +32,18 @@ def _make_validation_mocks(run_results: Any) -> tuple[Mock, Mock, AsyncMock]:
     mock_run_repo.get_results = AsyncMock(return_value=run_results)
     run_repo_factory = Mock(return_value=mock_run_repo)
 
-    return session_factory, run_repo_factory, mock_run_repo
+    stock_list: list[Any] = []
+    if stocks:
+        for sid, ticker in stocks:
+            s = MagicMock()
+            s.id = sid
+            s.ticker = ticker
+            stock_list.append(s)
+    mock_stock_repo = AsyncMock()
+    mock_stock_repo.list_by_tickers = AsyncMock(return_value=stock_list)
+    stock_repo_factory = Mock(return_value=mock_stock_repo)
+
+    return session_factory, run_repo_factory, stock_repo_factory, mock_run_repo, mock_stock_repo
 
 
 def _make_batch_exec_mocks(
@@ -88,7 +103,9 @@ def _make_service(**overrides: Any) -> NarrativeService:
 
 class TestStartBatch:
     async def test_start_batch_creates_pending_job(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        session_factory, run_repo_factory, _ = _make_validation_mocks([{"ticker": "X"}])
+        session_factory, run_repo_factory, stock_repo_factory, _, _ = _make_validation_mocks(
+            [{"ticker": "X", "total_rank": 1}]
+        )
         batch_repo = AsyncMock()
         cost_tracker = AsyncMock()
         cost_tracker.check_cap = AsyncMock()
@@ -108,6 +125,7 @@ class TestStartBatch:
             cost_tracker=cost_tracker,
             session_factory=session_factory,
             run_repo_factory=run_repo_factory,
+            stock_repo_factory=stock_repo_factory,
         )
         run_id = uuid4()
 
@@ -123,7 +141,9 @@ class TestStartBatch:
         """EN-Slice: start_batch akzeptiert language='en' und erstellt Job mit
         language='en' im Status 'pending'. Ersetzt den alten Guard-Test, weil
         EN-Templates jetzt produktiv sind."""
-        session_factory, run_repo_factory, _ = _make_validation_mocks([{"ticker": "X"}])
+        session_factory, run_repo_factory, stock_repo_factory, _, _ = _make_validation_mocks(
+            [{"ticker": "X", "total_rank": 1}]
+        )
         batch_repo = AsyncMock()
         cost_tracker = AsyncMock()
         cost_tracker.check_cap = AsyncMock()
@@ -141,6 +161,7 @@ class TestStartBatch:
             cost_tracker=cost_tracker,
             session_factory=session_factory,
             run_repo_factory=run_repo_factory,
+            stock_repo_factory=stock_repo_factory,
         )
         run_id = uuid4()
 
@@ -151,10 +172,11 @@ class TestStartBatch:
         batch_repo.save.assert_awaited_once()
 
     async def test_start_batch_raises_404_when_run_missing(self) -> None:
-        session_factory, run_repo_factory, _ = _make_validation_mocks(None)
+        session_factory, run_repo_factory, stock_repo_factory, _, _ = _make_validation_mocks(None)
         service = _make_service(
             session_factory=session_factory,
             run_repo_factory=run_repo_factory,
+            stock_repo_factory=stock_repo_factory,
         )
 
         with pytest.raises(LookupError, match="Run"):
@@ -163,7 +185,9 @@ class TestStartBatch:
     async def test_start_batch_pre_checks_budget_cap(self) -> None:
         from backend.domain.errors import BudgetCapExceeded
 
-        session_factory, run_repo_factory, _ = _make_validation_mocks([{"ticker": "X"}])
+        session_factory, run_repo_factory, stock_repo_factory, _, _ = _make_validation_mocks(
+            [{"ticker": "X", "total_rank": 1}]
+        )
         cost_tracker = AsyncMock()
         cost_tracker.check_cap = AsyncMock(
             side_effect=BudgetCapExceeded(
@@ -177,16 +201,20 @@ class TestStartBatch:
             cost_tracker=cost_tracker,
             session_factory=session_factory,
             run_repo_factory=run_repo_factory,
+            stock_repo_factory=stock_repo_factory,
         )
 
         with pytest.raises(BudgetCapExceeded):
             await service.start_batch(uuid4(), top_n=20)
 
     async def test_start_batch_validates_top_n_bounds(self) -> None:
-        session_factory, run_repo_factory, mock_run_repo = _make_validation_mocks([{"ticker": "X"}])
+        session_factory, run_repo_factory, stock_repo_factory, mock_run_repo, _ = (
+            _make_validation_mocks([{"ticker": "X", "total_rank": 1}])
+        )
         service = _make_service(
             session_factory=session_factory,
             run_repo_factory=run_repo_factory,
+            stock_repo_factory=stock_repo_factory,
         )
 
         with pytest.raises(ValueError, match="top_n"):
@@ -214,6 +242,7 @@ class TestExecuteBatch:
             language="de",
             status="pending",
             failed_stock_ids=[],
+            expected_stock_ids=stock_ids,
             error_message=None,
             created_at=datetime.now(UTC),
         )
@@ -263,6 +292,7 @@ class TestExecuteBatch:
             language="de",
             status="pending",
             failed_stock_ids=[],
+            expected_stock_ids=stock_ids,
             error_message=None,
             created_at=datetime.now(UTC),
         )
@@ -315,6 +345,7 @@ class TestExecuteBatch:
             language="de",
             status="pending",
             failed_stock_ids=[],
+            expected_stock_ids=stock_ids,
             error_message=None,
             created_at=datetime.now(UTC),
         )
@@ -363,6 +394,7 @@ class TestExecuteBatch:
             language="de",
             status="pending",
             failed_stock_ids=[],
+            expected_stock_ids=stock_ids,
             error_message=None,
             created_at=datetime.now(UTC),
         )
@@ -420,6 +452,8 @@ class TestExecuteBatchTickerLookup:
         # 3 Tickers im Run, aber nur 2 sind in der "DB" (Stock C fehlt).
         stock_ids = [uuid4(), uuid4()]
 
+        # start_batch haette nur A + B aufgeloest (C war nicht in DB).
+        # _execute_batch_inner liest expected_stock_ids direkt.
         existing_job = MemoBatchJob(
             id=job_id,
             model_run_id=run_id,
@@ -427,6 +461,7 @@ class TestExecuteBatchTickerLookup:
             language="de",
             status="pending",
             failed_stock_ids=[],
+            expected_stock_ids=stock_ids,  # nur A + B (C bereits geloescht)
             error_message=None,
             created_at=datetime.now(UTC),
         )
@@ -435,13 +470,8 @@ class TestExecuteBatchTickerLookup:
         batch_repo.save = AsyncMock()
 
         session_factory, run_repo_factory, stock_repo_factory, _, _ = _make_batch_exec_mocks(
-            run_results=[
-                {"ticker": "A", "total_rank": 1},
-                {"ticker": "B", "total_rank": 2},
-                {"ticker": "C", "total_rank": 3},  # nicht in stocks-Tabelle
-            ],
-            # list_by_tickers gibt nur A + B zurueck (C wurde aus DB geloescht)
-            stocks=[(stock_ids[0], "A"), (stock_ids[1], "B")],
+            run_results=[],  # nicht mehr benoetigt — _execute_batch_inner liest expected_stock_ids
+            stocks=[],
         )
 
         service = _make_service(
@@ -454,13 +484,12 @@ class TestExecuteBatchTickerLookup:
 
         await service._execute_batch(job_id)
 
-        # Worker beendet sauber mit status=complete fuer die 2 gefundenen
-        # Stocks; C wird stillschweigend uebersprungen (Warning im Log,
-        # nicht in failed_stock_ids — failed_stock_ids ist fuer LLM-Fails).
+        # Worker beendet sauber mit status=complete fuer die 2 Stocks in expected_stock_ids.
+        # C wurde bereits in start_batch uebersprungen (nicht in expected_stock_ids).
         last_job: MemoBatchJob = batch_repo.save.await_args_list[-1].args[0]
         assert last_job.status == "complete"
         assert last_job.failed_stock_ids == []
-        # _generate_memo_isolated wurde nur 2x gerufen (nicht 3x)
+        # _generate_memo_isolated wurde genau 2x gerufen (A + B)
         assert service._generate_memo_isolated.await_count == 2
 
 
@@ -473,7 +502,7 @@ class TestExecuteBatchStaleCleanupRace:
     den Cleanup-Status.
     """
 
-    async def test_worker_skips_save_when_cleanup_intervened(self) -> None:
+    def _make_cleanup_scenario(self, elapsed_seconds: int) -> tuple[AsyncMock, Any, Any]:
         from datetime import timedelta
 
         from backend.domain.entities.memo_batch_job import MemoBatchJob
@@ -481,7 +510,7 @@ class TestExecuteBatchStaleCleanupRace:
         run_id = uuid4()
         job_id = uuid4()
         stock_ids = [uuid4()]
-        old_start = datetime.now(UTC) - timedelta(seconds=700)  # > 600s timeout
+        start = datetime.now(UTC) - timedelta(seconds=elapsed_seconds)
 
         existing_job = MemoBatchJob(
             id=job_id,
@@ -490,20 +519,19 @@ class TestExecuteBatchStaleCleanupRace:
             language="de",
             status="pending",
             failed_stock_ids=[],
+            expected_stock_ids=stock_ids,
             error_message=None,
-            created_at=old_start,
+            created_at=start,
         )
-        # Cleanup-intervened state — naechster batch_repo.get liefert das
         cleanup_intervened = existing_job.model_copy(
             update={
                 "status": "failed",
-                "started_at": old_start,
+                "started_at": start,
                 "completed_at": datetime.now(UTC),
                 "error_message": "Job stale — Server-Restart oder Crash waehrend Ausfuehrung",
             }
         )
         batch_repo = AsyncMock()
-        # Sequence: get(initial) -> save(running) -> get(after-worker, finds cleanup)
         batch_repo.get = AsyncMock(side_effect=[existing_job, cleanup_intervened])
         batch_repo.save = AsyncMock()
 
@@ -511,7 +539,6 @@ class TestExecuteBatchStaleCleanupRace:
             run_results=[{"ticker": "A", "total_rank": 1}],
             stocks=[(stock_ids[0], "A")],
         )
-
         service = _make_service(
             batch_repository=batch_repo,
             session_factory=session_factory,
@@ -519,13 +546,27 @@ class TestExecuteBatchStaleCleanupRace:
             stock_repo_factory=stock_repo_factory,
         )
         service._generate_memo_isolated = AsyncMock()  # type: ignore[method-assign]
+        return batch_repo, service, job_id
 
+    async def test_worker_skips_save_when_cleanup_intervened(self) -> None:
+        """elapsed > timeout: klassischer Stale-Fall."""
+        batch_repo, service, job_id = self._make_cleanup_scenario(elapsed_seconds=700)
         await service._execute_batch(job_id)
 
-        # Worker hat save() genau 1x gerufen (status=running am Start).
-        # Final-Save wurde geskippt weil Cleanup intervenierte.
         assert batch_repo.save.await_count == 1
-        running_save: MemoBatchJob = batch_repo.save.await_args_list[0].args[0]
+        running_save = batch_repo.save.await_args_list[0].args[0]
+        assert running_save.status == "running"
+
+    async def test_worker_skips_save_when_cleanup_intervened_toctou(self) -> None:
+        """elapsed < timeout (TOCTOU-Fenster aus Issue #97): GET setzt failed bei
+        elapsed=599s, Worker re-read sieht elapsed=599 < 600 — alter Code würde
+        trotzdem final-save schreiben. Neuer Code: jedes failed vom Cleanup
+        wird respektiert, unabhängig von elapsed."""
+        batch_repo, service, job_id = self._make_cleanup_scenario(elapsed_seconds=599)
+        await service._execute_batch(job_id)
+
+        assert batch_repo.save.await_count == 1
+        running_save = batch_repo.save.await_args_list[0].args[0]
         assert running_save.status == "running"
 
 
@@ -553,6 +594,7 @@ class TestExecuteBatchBudgetErrorMessage:
             language="de",
             status="pending",
             failed_stock_ids=[],
+            expected_stock_ids=stock_ids,
             error_message=None,
             created_at=datetime.now(UTC),
         )
@@ -615,6 +657,7 @@ class TestExecuteBatchBudgetErrorMessage:
             language="de",
             status="pending",
             failed_stock_ids=[],
+            expected_stock_ids=stock_ids,
             error_message=None,
             created_at=datetime.now(UTC),
         )
@@ -834,7 +877,9 @@ class TestBug2BackgroundTaskRetention:
         """After start_batch, _background_tasks must hold a reference to the spawned task."""
         import asyncio
 
-        session_factory, run_repo_factory, _ = _make_validation_mocks([{"ticker": "X"}])
+        session_factory, run_repo_factory, stock_repo_factory, _, _ = _make_validation_mocks(
+            [{"ticker": "X", "total_rank": 1}]
+        )
         batch_repo = AsyncMock()
         cost_tracker = AsyncMock()
         cost_tracker.check_cap = AsyncMock()
@@ -857,6 +902,7 @@ class TestBug2BackgroundTaskRetention:
             cost_tracker=cost_tracker,
             session_factory=session_factory,
             run_repo_factory=run_repo_factory,
+            stock_repo_factory=stock_repo_factory,
         )
 
         await service.start_batch(uuid4(), top_n=5)
@@ -891,6 +937,7 @@ class TestBug3BudgetCapExceededCaught:
             language="de",
             status="pending",
             failed_stock_ids=[],
+            expected_stock_ids=stock_ids,
             error_message=None,
             created_at=datetime.now(UTC),
         )
@@ -1009,6 +1056,7 @@ class TestExecuteBatchCrashGuard:
             language="de",
             status="pending",
             failed_stock_ids=[],
+            expected_stock_ids=[stock_id_1, stock_id_2],
             error_message=None,
             created_at=datetime.now(UTC),
         )
