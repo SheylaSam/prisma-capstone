@@ -9,6 +9,8 @@ from backend.application.services.stock_service import StockNotFound  # moved he
 
 
 class FactsheetService:
+    """Kombiniert Stock-Stammdaten mit dem neuesten Ranking-Snapshot eines Tickers."""
+
     def __init__(
         self,
         stock_repo: StockRepository,
