@@ -29,7 +29,8 @@ test("Backtest starten und Chart mit 3 Kurven anzeigen", async ({ page, request 
   await expect(chart).toBeVisible({ timeout: 60_000 });
 
   // Verify 3 legend labels are rendered
-  await expect(page.getByText("PRISMA")).toBeVisible();
-  await expect(page.getByText("Universum")).toBeVisible();
-  await expect(page.getByText("Benchmark")).toBeVisible();
+  const chart = page.getByTestId("backtest-chart");
+  await expect(chart.getByText("PRISMA")).toBeVisible();
+  await expect(chart.getByText("Universum")).toBeVisible();
+  await expect(chart.getByText("Benchmark")).toBeVisible();
 });
