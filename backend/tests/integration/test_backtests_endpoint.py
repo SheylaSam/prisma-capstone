@@ -50,8 +50,7 @@ _RUN = RankingRun(
     status="completed",
 )
 _RESULTS = [
-    {"ticker": t, "total_rank": i + 1, "is_sweet_spot": False}
-    for i, t in enumerate(_TICKERS)
+    {"ticker": t, "total_rank": i + 1, "is_sweet_spot": False} for i, t in enumerate(_TICKERS)
 ]
 
 
@@ -187,9 +186,7 @@ async def test_post_backtest_returns_metrics(http_client: AsyncClient) -> None:
 
 
 async def test_post_backtest_unknown_run_returns_404(http_client: AsyncClient) -> None:
-    response = await http_client.post(
-        "/api/v1/backtests", json=_backtest_body(run_id=uuid.uuid4())
-    )
+    response = await http_client.post("/api/v1/backtests", json=_backtest_body(run_id=uuid.uuid4()))
     assert response.status_code == 404
 
 
