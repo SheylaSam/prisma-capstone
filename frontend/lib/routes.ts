@@ -1,5 +1,5 @@
 export const ROUTES = {
-  dashboard: '/',
+  dashboard: '/dashboard',
   universes: '/universes',
   rankings: '/rankings',
   factsheet: (runId: string, ticker: string) =>

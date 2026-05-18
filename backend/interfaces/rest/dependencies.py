@@ -1,6 +1,7 @@
 """FastAPI Dependency-Injection-Kette: Session → Repository → Service."""
 
 import hmac
+import logging
 from collections.abc import AsyncGenerator
 from functools import lru_cache
 from typing import Any
@@ -52,6 +53,8 @@ from backend.infrastructure.persistence.session import (
 from backend.infrastructure.providers.stub_fundamentals import StubFundamentalsProvider
 from backend.infrastructure.providers.stub_market_data import StubMarketDataProvider
 
+_logger = logging.getLogger(__name__)
+
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """Liefert eine AsyncSession für den aktuellen Request-Scope.
@@ -73,11 +76,25 @@ async def get_stock_repository(
     return SQLAStockRepository(session=session)
 
 
-async def get_fundamentals_provider() -> FundamentalsProvider:
+async def get_fundamentals_provider(
+    settings: Settings = Depends(get_settings),
+) -> FundamentalsProvider:
+    if settings.environment == "production":
+        _logger.warning(
+            "StubFundamentalsProvider active in production — serving synthetic data. "
+            "Wire a real FundamentalsProvider before going live (Issue #41)."
+        )
     return StubFundamentalsProvider()
 
 
-async def get_market_data_provider() -> MarketDataProvider:
+async def get_market_data_provider(
+    settings: Settings = Depends(get_settings),
+) -> MarketDataProvider:
+    if settings.environment == "production":
+        _logger.warning(
+            "StubMarketDataProvider active in production — serving synthetic data. "
+            "Wire a real MarketDataProvider before going live (Issue #41)."
+        )
     return StubMarketDataProvider()
 
 
