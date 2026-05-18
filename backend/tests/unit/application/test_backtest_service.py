@@ -154,7 +154,7 @@ async def test_result_is_persisted(service: BacktestService) -> None:
 
 @pytest.mark.asyncio
 async def test_run_not_found_raises(service: BacktestService) -> None:
-    service._run_repo.get.return_value = None
+    service._run_repo.get.return_value = None  # type: ignore[attr-defined]
     with pytest.raises(RunNotFound):
         await service.run_backtest(
             model_run_id=uuid4(),
@@ -167,7 +167,7 @@ async def test_run_not_found_raises(service: BacktestService) -> None:
 
 @pytest.mark.asyncio
 async def test_no_results_raises(service: BacktestService) -> None:
-    service._run_repo.get_results.return_value = None
+    service._run_repo.get_results.return_value = None  # type: ignore[attr-defined]
     with pytest.raises(NoResultsFound):
         await service.run_backtest(
             model_run_id=RUN_ID,
