@@ -40,7 +40,9 @@ class RetrievalService:
             ticker: Optionale Einschraenkung auf einen Ticker (z.B. "AAPL").
         """
         k = min(k, _MAX_K)
-        embeddings = await self._llm.embed(texts=[query], model=_VOYAGE_MODEL)
+        embeddings = await self._llm.embed(
+            texts=[query], model=_VOYAGE_MODEL, feature="rag_retrieval"
+        )
         query_embedding = embeddings[0]
         return await self._repo.find_nearest(
             query_embedding=query_embedding,
