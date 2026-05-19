@@ -212,7 +212,6 @@ LLM-Code mit StubClient grün ≠ production-ready. Mindestens 1× gegen echte A
 - **Nachbearbeitung nötig bei**: Integration-Tests (Postgres-Container) lokal nicht ausfuehrbar, CI ist Acceptance-Gate fuer `test_backtests_endpoint.py`.
 - **Lektion**: TDD-Skill hat einen falsch-positiven Test sofort gefangen. Der vorgeschlagene "test passes immediately → fix test"-Regel-Trigger hat den Reset-Test von einem schwachen ("Feb-1 = 50/50") zu einem starken ("Drift im Januar + Reset am 31.01.") gemacht. Faengt zukuenftige Vectorize-Regressionen.
 - **Autor**: Fabia Holzer (mit Claude Code)
-
 ## 2026-05-19 · RAG-Pipeline Retrieval — Tests + Bug-Fix (Issue #18, PR #136)
 - **Agent**: Claude Code (Sonnet 4.6)
 - **Scope**: Nacharbeit zu PR #136: Missing-`feature`-kwarg-Bug in `RetrievalService.retrieve()` gefixt, 6 Unit-Tests (`test_retrieval_service.py`) + 9 Integrationstests (`test_rag_endpoint.py`) hinzugefügt.
