@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from backend.application.services.retrieval_service import RetrievalService, _MAX_K
+from backend.application.services.retrieval_service import _MAX_K, RetrievalService
 from backend.domain.repositories.embedding_repository import RetrievalResult
 
 pytestmark = pytest.mark.unit
