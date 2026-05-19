@@ -8,7 +8,7 @@ PRISMA zerlegt Aktien in analytische Dimensionen — wie ein optisches Prisma we
 
 ## Abgabe-Status
 
-Sichtbare Nachweise gegen das Capstone-Bewertungsraster (Stand: 2026-05-17).
+Sichtbare Nachweise gegen das Capstone-Bewertungsraster (Stand: 2026-05-19).
 
 | Kriterium | Status | Nachweis |
 |---|---|---|
@@ -20,8 +20,7 @@ Sichtbare Nachweise gegen das Capstone-Bewertungsraster (Stand: 2026-05-17).
 | **CD-Workflow** | `workflow_dispatch` → Render Deploy Hook (Backend / Frontend / beide) | [`.github/workflows/cd-render.yml`](./.github/workflows/cd-render.yml) |
 | **Deployment** | Live auf Render (Free-Plan) | Frontend: [prisma-frontend-jrto.onrender.com](https://prisma-frontend-jrto.onrender.com) · Backend: [prisma-backend-7ai7.onrender.com/health](https://prisma-backend-7ai7.onrender.com/health) · Config: [`render.yaml`](./render.yaml) |
 | **API-Docs** | OpenAPI/Swagger automatisch generiert (FastAPI) | [prisma-backend-7ai7.onrender.com/docs](https://prisma-backend-7ai7.onrender.com/docs) |
-| **AI-Usage-Log** | Reflexion pro PR mit Agent / Patterns / Lehren — 40%-Bewertungsachse | [`docs/AI-USAGE.md`](./docs/AI-USAGE.md) (>20 Einträge, Pattern-Sektion mit Evidenz-Links) |
-| **Demo-Skript** | Strukturierter Walk-Through für Live-Demo mit Q&A-Prep | [`docs/DEMO-SCRIPT.md`](./docs/DEMO-SCRIPT.md) |
+| **AI-Usage-Log** | Reflexion pro PR mit Agent / Patterns / Lehren — 40%-Bewertungsachse | [`docs/AI-USAGE.md`](./docs/AI-USAGE.md) (>37 Einträge, 10 Positives + 8 Anti-Patterns + 4 Quer-Patterns mit Evidenz) |
 
 ### Demo-Flow
 

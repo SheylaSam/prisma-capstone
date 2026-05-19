@@ -16,7 +16,7 @@ Pro PR mit substantieller Agent-Beteiligung ein Eintrag:
 - **Autor**: <Teammitglied>
 ```
 
-## Patterns (extrahiert aus 14 Einträgen, Stand 2026-05-10)
+## Patterns (extrahiert aus 37 Einträgen, Stand 2026-05-19)
 
 Diese Sektion kondensiert wiederkehrende Lehren aus den Einträgen unten. Jeder Pattern verlinkt auf die Einträge mit konkreter Evidenz, damit der Pattern-Claim verifizierbar bleibt — nicht aus dem Bauch, sondern aus tatsächlich gemachten Erfahrungen.
 
@@ -72,6 +72,12 @@ Diese Sektion kondensiert wiederkehrende Lehren aus den Einträgen unten. Jeder 
 - **Evidenz**: ADR-0005 (Opus für Trade-off-Analyse, Sonnet-Subagent für ADR-Schreibarbeit nach Vorbild). PR #24 (Opus-Brainstorming, Sonnet-Subagent für 643-Zeilen-Spec-Schreibarbeit).
 - **Wirkung**: Opus-Hauptkontext bleibt frei für Entscheidungen, die Urteil brauchen. Spiegelt PRISMAs eigenes Multi-Agent-Pattern (AnalystAgent vs SynthesizerAgent).
 
+#### P10. Null-Object statt Mock für persistente Infrastruktur in Tests
+**Test-Infrastruktur (Repositories, Clients) via Null-Object-Pattern implementieren statt via `MagicMock`.** Null-Objekte sind explizit, typsicher und dokumentieren die erlaubten Operationen.
+- **Evidenz**: PR #135 (`_NullCostLogRepository` für `FixtureLLMClient` — implementiert das `CostLogRepository`-Interface vollständig, alle Operationen als No-Op. Kein `AsyncMock(return_value=...)` pro Methode nötig). `InMemoryUniverseRepository` in Integration-Tests.
+- **Wirkung**: Null-Objekte fangen Breaking Changes an der Schnittstelle (mypy schlägt an wenn Interface sich ändert), Mocks tun das nicht. Testcode ist weniger fragil.
+- **How to apply**: Wenn ein Mock mehr als 2 `return_value`-Konfigurationen braucht → Null-Object schreiben. Für einfache Single-Call-Verifikation bleibt `AsyncMock` sinnvoll.
+
 ---
 
 ### Anti-Patterns — was wiederholt schiefging
@@ -110,6 +116,11 @@ Diese Sektion kondensiert wiederkehrende Lehren aus den Einträgen unten. Jeder 
 **LLM-Output-Constraints (`max_length`, `min_length`, Pattern)** müssen empirisch gegen das Production-Modell kalibriert werden, nicht aus dem Spec geraten.
 - **Evidenz**: PR #64 (Pydantic `string_too_long` auf `ranking_interpretation` mit `max_length=600`, Sonnet schreibt typisch 700-1000 Zeichen für 5-Modell-Interpretation. In Production wäre alles in Error-Memo-Pfad gewandert).
 - **Mitigation**: Vor dem ersten Production-Smoke einmal mit echten Inputs gegen das Modell laufen lassen, dann Schema-Constraints kalibrieren. Real-API-Smoke ist Acceptance, nicht Polish (Q4).
+
+#### A8. Required kwargs ohne Default in internen APIs unbemerkt vergessen
+**Interne Hilfsfunktionen mit required kwargs (kein Default)** werden beim ersten Aufrufer korrekt gesetzt, aber bei neuen Aufrufern oft vergessen — besonders wenn die Funktion viele optionale Kwargs hat.
+- **Evidenz**: PR #136 / Nacharbeit 2026-05-19 (`LLMClient.embed(feature=)` ist required, aber `RetrievalService.retrieve()` rief `embed()` ohne `feature=` auf — stiller TypeError zur Laufzeit, kein mypy-Fehler weil der Service selbst nicht vollständig getypt war).
+- **Mitigation**: (1) Neuen Aufrufer immer gegen die vollständige Methodensignatur der aufgerufenen Funktion gegenchecken. (2) Bei `mypy strict` wäre das sofort gefangen worden — Strict-Mypy zahlt sich aus. (3) Required kwargs in internen APIs als Code-Review-Checkliste aufnehmen.
 
 ---
 
