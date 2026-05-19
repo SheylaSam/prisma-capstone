@@ -34,7 +34,11 @@ class SQLAUniverseRepository(UniverseRepository):
             )
             .on_conflict_do_update(
                 index_elements=["id"],
-                set_={"name": universe.name, "region": universe.region, "tickers": list(universe.tickers)},
+                set_={
+                    "name": universe.name,
+                    "region": universe.region,
+                    "tickers": list(universe.tickers),
+                },
             )
         )
         await self._session.execute(stmt)
