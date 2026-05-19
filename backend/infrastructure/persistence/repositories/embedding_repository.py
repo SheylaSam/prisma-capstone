@@ -147,7 +147,7 @@ class SQLAEmbeddingRepository(EmbeddingRepository):
             ORDER BY (ec.embedding::halfvec(2048)) <=> (:query::vector(2048)::halfvec(2048))
             LIMIT :k
         """
-        params: dict = {"query": str(query_embedding), "k": k}
+        params: dict[str, object] = {"query": str(query_embedding), "k": k}
         if ticker:
             params["ticker"] = ticker
 

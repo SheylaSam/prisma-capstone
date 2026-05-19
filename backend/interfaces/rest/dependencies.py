@@ -298,7 +298,7 @@ async def get_voyage_client() -> Any:
         return None
     import voyageai
 
-    return voyageai.Client(api_key=settings.voyage_api_key)
+    return voyageai.Client(api_key=settings.voyage_api_key)  # type: ignore[attr-defined]
 
 
 async def get_retrieval_service(
