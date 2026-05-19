@@ -291,8 +291,13 @@ async def get_embedding_repository() -> Any:
     return SQLAEmbeddingRepository(session_factory=get_session_factory())
 
 
-async def get_voyage_client() -> Any:
-    """Gibt einen Voyage-Client zurueck oder None wenn kein API-Key konfiguriert."""
+@lru_cache(maxsize=1)
+def get_voyage_client() -> Any:
+    """Singleton-Voyage-Client analog get_anthropic_client().
+
+    Sync + lru_cache verhindert, dass im Memo-Batch (N Stocks) N neue
+    Client-Instanzen gebaut werden.
+    """
     settings = get_settings()
     if not settings.voyage_api_key:
         return None
@@ -305,7 +310,7 @@ async def get_retrieval_service(
     embedding_repo: Any = Depends(get_embedding_repository),
     cost_tracker: CostTracker = Depends(get_cost_tracker),
 ) -> RetrievalService:
-    voyage = await get_voyage_client()
+    voyage = get_voyage_client()
     llm = LLMClient(
         anthropic=get_anthropic_client(),
         voyage=voyage,

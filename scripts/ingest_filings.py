@@ -188,7 +188,9 @@ async def ingest() -> None:
             cik = _CIK_MAP[ticker]
             log.info("[%s] Suche Filings (CIK %s)...", ticker, cik)
 
-            filings = await _get_recent_filings(http, cik, ["10-K", "10-Q"], count=2)
+            filings_10k = await _get_recent_filings(http, cik, ["10-K"], count=2)
+            filings_10q = await _get_recent_filings(http, cik, ["10-Q"], count=2)
+            filings = filings_10k + filings_10q
             if not filings:
                 log.warning("[%s] Keine Filings gefunden — ueberspringe.", ticker)
                 continue
