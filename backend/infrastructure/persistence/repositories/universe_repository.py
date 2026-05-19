@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.domain.entities.universe import Universe
@@ -23,14 +24,20 @@ class SQLAUniverseRepository(UniverseRepository):
         return [self._to_domain(row) for row in result.scalars().all()]
 
     async def save(self, universe: Universe) -> None:
-        await self._session.merge(
-            UniverseORM(
+        stmt = (
+            pg_insert(UniverseORM)
+            .values(
                 id=universe.id,
                 name=universe.name,
                 region=universe.region,
                 tickers=list(universe.tickers),
             )
+            .on_conflict_do_update(
+                index_elements=["id"],
+                set_={"name": universe.name, "region": universe.region, "tickers": list(universe.tickers)},
+            )
         )
+        await self._session.execute(stmt)
 
     @staticmethod
     def _to_domain(orm: UniverseORM) -> Universe:

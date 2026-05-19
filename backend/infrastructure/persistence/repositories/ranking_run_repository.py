@@ -4,6 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.domain.entities.ranking_run import RankingRun
@@ -23,15 +24,21 @@ class SQLARankingRunRepository(RankingRunRepository):
         return self._to_domain(row) if row else None
 
     async def save(self, run: RankingRun) -> None:
-        await self._session.merge(
-            RankingRunORM(
+        stmt = (
+            pg_insert(RankingRunORM)
+            .values(
                 id=run.id,
                 created_at=run.created_at,
                 universe_id=run.universe_id,
                 weight_config=run.weight_config.weights,
                 status=run.status,
             )
+            .on_conflict_do_update(
+                index_elements=["id"],
+                set_={"status": run.status, "weight_config": run.weight_config.weights},
+            )
         )
+        await self._session.execute(stmt)
 
     async def list_by_universe(self, universe_id: UUID) -> list[RankingRun]:
         stmt = (
