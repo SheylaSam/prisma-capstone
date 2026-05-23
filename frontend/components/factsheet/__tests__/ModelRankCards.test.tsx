@@ -31,4 +31,20 @@ describe('ModelRankCards', () => {
     render(<ModelRankCards perModelRanks={perModelRanks} />);
     expect(screen.getByText('—')).toBeDefined();
   });
+
+  it('jede Card hat ein Info-Icon mit aria-label', () => {
+    render(<ModelRankCards perModelRanks={perModelRanks} />);
+    expect(screen.getByRole('button', { name: 'Info zu Quality' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Info zu Alpha' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Info zu Trend' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Info zu Value' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Info zu Diversification' })).toBeDefined();
+  });
+
+  it('Klick auf Quality-Info zeigt 8-Kennzahlen-Tooltip', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    render(<ModelRankCards perModelRanks={perModelRanks} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Info zu Quality' }));
+    expect(screen.getByText(/8 klassische Kennzahlen/)).toBeDefined();
+  });
 });

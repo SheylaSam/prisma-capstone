@@ -1,10 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ModelInfoIcon } from '@/components/ModelInfoIcon';
+import type { ModelKey } from '@/lib/model-info';
 
 interface Props {
   perModelRanks: Record<string, number | null>;
 }
 
-const MODELS: Array<{ key: string; label: string }> = [
+const MODELS: Array<{ key: ModelKey; label: string }> = [
   { key: 'quality_classic', label: 'Quality Classic' },
   { key: 'alpha', label: 'Alpha' },
   { key: 'trend_momentum', label: 'Trend Momentum' },
@@ -44,7 +46,10 @@ export function ModelRankCards({ perModelRanks }: Props) {
           <Card key={key}>
             <CardHeader className="pb-1 pt-4 px-4">
               <CardTitle className="text-xs font-medium text-muted-foreground leading-tight">
-                {label}
+                <span className="inline-flex items-center gap-1">
+                  {label}
+                  <ModelInfoIcon modelKey={key} />
+                </span>
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
