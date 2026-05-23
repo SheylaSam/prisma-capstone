@@ -39,6 +39,7 @@ export default function HomePage() {
       <section className="space-y-4 py-8">
         <div className="space-y-2">
           <h1 className="text-4xl font-black tracking-tight sm:text-5xl">PRISMA</h1>
+          <div className="h-1 w-[200px] rounded-full bg-spectrum" aria-hidden="true" />
           <p className="max-w-2xl text-lg text-muted-foreground">
             Quantitative Stock-Selection zerlegt in analytische Dimensionen
           </p>
