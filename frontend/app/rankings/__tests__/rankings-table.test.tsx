@@ -200,7 +200,14 @@ describe('RankingsTable', () => {
     const badge = screen.getByRole('button', { name: 'Sweet-Spot-Begründung für T1' });
     fireEvent.click(badge);
     // Schwelle: ceil(20*0.25)=5 → T1 (rank=1 überall) erfüllt in allen 5
-    expect(screen.getByText(/T1 ist Top-25 ?% in/)).toBeInTheDocument();
-    expect(screen.getByText(/5\/5/)).toBeInTheDocument();
+    // Mit <strong>{ticker}</strong> sind T1 und der Rest separate Text-Nodes,
+    // daher per textContent über das Eltern-Element matchen.
+    const matches = screen.getAllByText((_, el) =>
+      el?.textContent?.startsWith('T1 ist Top-25') ?? false,
+    );
+    expect(matches.length).toBeGreaterThan(0);
+    const content = matches[0].textContent ?? '';
+    expect(content).toMatch(/T1 ist Top-25 ?% in/);
+    expect(content).toMatch(/5\/5/);
   });
 });

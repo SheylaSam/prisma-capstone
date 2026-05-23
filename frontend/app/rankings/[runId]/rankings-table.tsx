@@ -114,7 +114,9 @@ function SweetSpotBadge({
 
   return (
     <InfoPopover ariaLabel={`Sweet-Spot-Begründung für ${ticker}`}>
-      <p className="font-semibold">{`${ticker} ist Top-25 % in ${labels} (${count}/5 Modellen).`}</p>
+      <p>
+        <strong>{ticker}</strong> ist Top-25 % in {labels} ({count}/5 Modellen).
+      </p>
     </InfoPopover>
   );
 }
