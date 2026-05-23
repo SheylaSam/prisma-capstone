@@ -14,7 +14,7 @@ export function TopTenCards({ items, runId }: Props) {
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       {items.map((item) => {
         const sweetSpotClasses = item.is_sweet_spot
-          ? 'border-amber-400 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/30'
+          ? 'border-pink-500 bg-pink-50/60 dark:border-pink-600 dark:bg-pink-950/30'
           : 'border-border bg-card';
         return (
           <Link
@@ -28,7 +28,7 @@ export function TopTenCards({ items, runId }: Props) {
               </span>
               {item.is_sweet_spot && (
                 <Star
-                  className="h-3.5 w-3.5 fill-amber-400 text-amber-400"
+                  className="h-3.5 w-3.5 fill-pink-600 text-pink-600"
                   aria-label="Sweet-Spot"
                 />
               )}

@@ -41,12 +41,12 @@ describe('TopTenCards', () => {
     expect(stars).toHaveLength(2); // AAPL + MSFT
   });
 
-  it('Sweet-Spot-Karten haben Amber-Border-Klasse', () => {
+  it('Sweet-Spot-Karten haben Pink-Border-Klasse', () => {
     render(<TopTenCards items={items} runId="run-1" />);
     const aaplLink = screen.getByText('AAPL').closest('a');
-    expect(aaplLink?.className).toMatch(/border-amber-400/);
+    expect(aaplLink?.className).toMatch(/border-pink-500/);
     const nvdaLink = screen.getByText('NVDA').closest('a');
-    expect(nvdaLink?.className).not.toMatch(/border-amber-400/);
+    expect(nvdaLink?.className).not.toMatch(/border-pink-500/);
   });
 
   it('jede Karte ist ein Link zur Factsheet-Route', () => {
