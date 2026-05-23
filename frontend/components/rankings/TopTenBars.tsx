@@ -27,7 +27,7 @@ interface ChartDatum {
   is_sweet_spot: boolean;
 }
 
-const AMBER = '#f59e0b';
+const SWEET_SPOT = '#db2777';
 const PRIMARY = 'hsl(var(--primary))';
 
 function TickLabel(props: {
@@ -41,7 +41,7 @@ function TickLabel(props: {
   if (!payload) return null;
   const ticker = payload.value;
   const datum = data.find((d) => d.ticker === ticker);
-  const fill = datum?.is_sweet_spot ? AMBER : 'currentColor';
+  const fill = datum?.is_sweet_spot ? SWEET_SPOT : 'currentColor';
   return (
     <text
       x={x}
@@ -74,7 +74,7 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<
     <div className="rounded border bg-popover px-2 py-1 text-sm text-popover-foreground shadow-sm">
       <span className="font-mono">{ticker}</span>
       <span className="text-muted-foreground"> — Avg {avgDisplay}</span>
-      {is_sweet_spot && <span className="text-amber-500"> • Sweet-Spot</span>}
+      {is_sweet_spot && <span className="text-pink-600"> • Sweet-Spot</span>}
     </div>
   );
 }
@@ -113,7 +113,7 @@ export function TopTenBars({ items, runId }: Props) {
         <Tooltip cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }} content={<CustomTooltip />} />
         <Bar dataKey="weighted_avg" radius={[0, 4, 4, 0]} isAnimationActive={false}>
           {chartData.map((entry) => (
-            <Cell key={entry.ticker} fill={entry.is_sweet_spot ? AMBER : PRIMARY} />
+            <Cell key={entry.ticker} fill={entry.is_sweet_spot ? SWEET_SPOT : PRIMARY} />
           ))}
           <LabelList
             dataKey="weighted_avg"

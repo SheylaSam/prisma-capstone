@@ -69,8 +69,8 @@ describe('TopTenBars', () => {
     const elements = paths.length > 0 ? paths : rects;
     const fills = Array.from(elements).map((c) => c.getAttribute('fill'));
     // 3 Bars — AAPL und MSFT sind sweet-spot (Amber), NVDA nicht
-    const amberCount = fills.filter((f) => f === '#f59e0b').length;
-    expect(amberCount).toBe(2);
+    const pinkCount = fills.filter((f) => f === '#db2777').length;
+    expect(pinkCount).toBe(2);
   });
 
   it('Klick auf Y-Tick-Label navigiert zur Factsheet', () => {
