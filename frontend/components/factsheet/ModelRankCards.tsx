@@ -31,12 +31,18 @@ export function ModelRankCards({ perModelRanks }: Props) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       {MODEL_KEYS.map((key) => {
-        const { label } = MODEL_INFO[key];
+        const info = MODEL_INFO[key];
+        const { label } = info;
         const rank = perModelRanks[key] ?? null;
         const quartile = rank !== null ? getQuartile(rank) : null;
 
         return (
-          <Card key={key}>
+          <Card
+            key={key}
+            data-model-key={key}
+            className="border-t-4"
+            style={{ borderTopColor: `hsl(${info.colorVar})` }}
+          >
             <CardHeader className="pb-1 pt-4 px-4">
               <CardTitle className="text-xs font-medium text-muted-foreground leading-tight">
                 <span className="inline-flex items-center gap-1">

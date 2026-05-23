@@ -46,4 +46,23 @@ describe('ModelRankCards', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Info zu Quality' }));
     expect(screen.getByText(/8 klassische Kennzahlen/)).toBeDefined();
   });
+
+  it('jede Card hat border-t-4 und Modell-spezifische borderTopColor', () => {
+    const { container } = render(<ModelRankCards perModelRanks={perModelRanks} />);
+    const cards = container.querySelectorAll<HTMLElement>('[data-model-key]');
+    expect(cards).toHaveLength(5);
+
+    const colorByKey: Record<string, string> = {
+      quality_classic: 'hsl(var(--model-quality))',
+      alpha: 'hsl(var(--model-alpha))',
+      trend_momentum: 'hsl(var(--model-trend))',
+      value_alpha_potential: 'hsl(var(--model-value))',
+      diversification: 'hsl(var(--model-diversification))',
+    };
+    for (const card of Array.from(cards)) {
+      const key = card.dataset.modelKey!;
+      expect(card.className).toMatch(/border-t-4/);
+      expect(card.style.borderTopColor).toBe(colorByKey[key]);
+    }
+  });
 });
