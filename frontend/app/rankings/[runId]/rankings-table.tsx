@@ -20,7 +20,7 @@ import { InfoPopover } from '@/components/InfoPopover';
 import { ModelInfoIcon } from '@/components/ModelInfoIcon';
 import { MODEL_INFO, SWEET_SPOT_DEFINITION, getSweetSpotModels, type ModelKey } from '@/lib/model-info';
 
-const MODEL_COLUMNS: Array<{ key: string; label: string }> = [
+const MODEL_COLUMNS: Array<{ key: ModelKey; label: string }> = [
   { key: 'quality_classic', label: 'Quality' },
   { key: 'diversification', label: 'Diversification' },
   { key: 'trend_momentum', label: 'Trend' },
@@ -209,7 +209,7 @@ export function RankingsTable({ items, runId }: { items: RankingItem[]; runId: s
                   activeSortKey={sortKey}
                   sortDir={sortDir}
                   onSort={handleSort}
-                  infoIcon={<ModelInfoIcon modelKey={col.key as ModelKey} />}
+                  infoIcon={<ModelInfoIcon modelKey={col.key} />}
                 >
                   {col.label}
                 </SortableHead>
