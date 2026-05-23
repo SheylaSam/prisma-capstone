@@ -44,4 +44,16 @@ describe('InfoPopover', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Info zu Quality' }));
     expect(parentClick).not.toHaveBeenCalled();
   });
+
+  it('Escape-Taste schließt geöffnetes Popover', () => {
+    render(
+      <InfoPopover ariaLabel="Info zu Quality">
+        <p>Quality-Beschreibung</p>
+      </InfoPopover>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Info zu Quality' }));
+    expect(screen.getByText('Quality-Beschreibung')).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByText('Quality-Beschreibung')).not.toBeInTheDocument();
+  });
 });
