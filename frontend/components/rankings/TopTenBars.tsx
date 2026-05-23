@@ -46,10 +46,19 @@ function TickLabel(props: {
       x={x}
       y={y}
       dy={4}
+      tabIndex={0}
+      role="link"
+      aria-label={`${ticker} Factsheet öffnen`}
       textAnchor="end"
-      className="cursor-pointer font-mono text-xs"
+      className="cursor-pointer font-mono text-xs focus:outline-none focus:underline"
       fill={fill}
       onClick={() => onClick(ticker)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick(ticker);
+        }
+      }}
     >
       {ticker}
     </text>
@@ -100,13 +109,13 @@ export function TopTenBars({ items, runId }: Props) {
         />
         <Tooltip cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }} content={<CustomTooltip />} />
         <Bar dataKey="weighted_avg" radius={[0, 4, 4, 0]} isAnimationActive={false}>
-          {chartData.map((entry, index) => (
-            <Cell key={index} fill={entry.is_sweet_spot ? AMBER : PRIMARY} />
+          {chartData.map((entry) => (
+            <Cell key={entry.ticker} fill={entry.is_sweet_spot ? AMBER : PRIMARY} />
           ))}
           <LabelList
             dataKey="weighted_avg"
             position="right"
-            formatter={(value: number) => value.toFixed(2)}
+            formatter={(value: unknown) => (typeof value === 'number' ? value.toFixed(2) : '—')}
             className="fill-foreground text-xs"
           />
         </Bar>

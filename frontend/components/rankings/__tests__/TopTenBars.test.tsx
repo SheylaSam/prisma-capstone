@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
 import { TopTenBars } from '../TopTenBars';
@@ -49,6 +49,10 @@ function getTickByText(container: HTMLElement, ticker: string): SVGTextElement {
 }
 
 describe('TopTenBars', () => {
+  beforeEach(() => {
+    pushMock.mockClear();
+  });
+
   it('rendert für jedes Item einen Tick mit Ticker', () => {
     const { container } = render(<TopTenBars items={items} runId="run-1" />);
     expect(getTickByText(container, 'AAPL')).toBeInTheDocument();
@@ -73,6 +77,13 @@ describe('TopTenBars', () => {
     const { container } = render(<TopTenBars items={items} runId="run-1" />);
     const aaplLabel = getTickByText(container, 'AAPL');
     fireEvent.click(aaplLabel);
+    expect(pushMock).toHaveBeenCalledWith('/rankings/run-1/stock/AAPL');
+  });
+
+  it('Enter-Taste auf Y-Tick navigiert', () => {
+    const { container } = render(<TopTenBars items={items} runId="run-1" />);
+    const aaplLabel = getTickByText(container, 'AAPL');
+    fireEvent.keyDown(aaplLabel, { key: 'Enter' });
     expect(pushMock).toHaveBeenCalledWith('/rankings/run-1/stock/AAPL');
   });
 });
