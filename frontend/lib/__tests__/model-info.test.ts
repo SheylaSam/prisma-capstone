@@ -27,6 +27,19 @@ describe('MODEL_INFO', () => {
     expect(SWEET_SPOT_DEFINITION).toMatch(/25 ?%/);
     expect(SWEET_SPOT_DEFINITION).toMatch(/3 von 5|3\/5/);
   });
+
+  it('hat eine colorVar pro Modell-Key (CSS-Custom-Property)', () => {
+    const expected: Record<string, string> = {
+      quality_classic: 'var(--model-quality)',
+      alpha: 'var(--model-alpha)',
+      trend_momentum: 'var(--model-trend)',
+      value_alpha_potential: 'var(--model-value)',
+      diversification: 'var(--model-diversification)',
+    };
+    for (const key of MODEL_KEYS) {
+      expect(MODEL_INFO[key].colorVar).toBe(expected[key]);
+    }
+  });
 });
 
 describe('getSweetSpotModels', () => {

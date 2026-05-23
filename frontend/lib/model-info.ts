@@ -8,31 +8,36 @@ export const MODEL_KEYS = [
 
 export type ModelKey = (typeof MODEL_KEYS)[number];
 
-export const MODEL_INFO: Record<ModelKey, { label: string; description: string }> = {
+export const MODEL_INFO: Record<ModelKey, { label: string; description: string; colorVar: string }> = {
   quality_classic: {
     label: 'Quality',
     description:
       'Fundamental gesund & günstig bewertet — Kombiniert 8 klassische Kennzahlen (Marge, Verschuldung, ROE, KGV …) zu einem Score.',
+    colorVar: 'var(--model-quality)',
   },
   alpha: {
     label: 'Alpha',
     description:
       'Konsistent besser als der Index — Outperformance vs. Benchmark über mehrere Zeithorizonte, mit Sharpe gewichtet.',
+    colorVar: 'var(--model-alpha)',
   },
   trend_momentum: {
     label: 'Trend',
     description:
       'Aktuelles Momentum — Welche Aktien zuletzt stärker als der Markt liefen, jüngere Daten zählen mehr.',
+    colorVar: 'var(--model-trend)',
   },
   value_alpha_potential: {
     label: 'Value',
     description:
       'Mean-Reversion-Kandidaten — Wie weit unter dem eigenen historischen Outperformance-Hoch der Titel steht.',
+    colorVar: 'var(--model-value)',
   },
   diversification: {
     label: 'Diversification',
     description:
       'Risiko-Diversifikatoren — Niedrige Eigenvolatilität und niedrige Korrelation zu anderen Titeln im Universum.',
+    colorVar: 'var(--model-diversification)',
   },
 };
 

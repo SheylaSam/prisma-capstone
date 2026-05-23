@@ -49,6 +49,14 @@ const config: Config = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        model: {
+          quality: 'hsl(var(--model-quality))',
+          diversification: 'hsl(var(--model-diversification))',
+          trend: 'hsl(var(--model-trend))',
+          value: 'hsl(var(--model-value))',
+          alpha: 'hsl(var(--model-alpha))',
+        },
+        'sweet-spot': 'hsl(var(--sweet-spot))',
       },
       borderRadius: {
         lg: 'var(--radius)',

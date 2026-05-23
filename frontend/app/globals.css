@@ -33,6 +33,14 @@
     --ring: 222.2 84% 4.9%;
 
     --radius: 0.5rem;
+
+    /* Spektrum — 5 Modell-Farben */
+    --model-quality:         142 71% 45%;
+    --model-diversification: 217 91% 60%;
+    --model-trend:           17 88% 48%;
+    --model-value:           262 83% 58%;
+    --model-alpha:           45 93% 47%;
+    --sweet-spot:            330 81% 50%;
   }
 
   .dark {
@@ -63,6 +71,13 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
+
+    --model-quality:         142 71% 55%;
+    --model-diversification: 217 91% 65%;
+    --model-trend:           17 88% 58%;
+    --model-value:           262 83% 68%;
+    --model-alpha:           45 93% 57%;
+    --sweet-spot:            330 81% 60%;
   }
 }
 
@@ -72,5 +87,18 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .bg-spectrum {
+    background: linear-gradient(
+      to right,
+      hsl(var(--model-quality)),
+      hsl(var(--model-diversification)),
+      hsl(var(--model-trend)),
+      hsl(var(--model-value)),
+      hsl(var(--model-alpha))
+    );
   }
 }
