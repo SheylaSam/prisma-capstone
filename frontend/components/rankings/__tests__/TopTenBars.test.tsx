@@ -60,7 +60,7 @@ describe('TopTenBars', () => {
     expect(getTickByText(container, 'NVDA')).toBeInTheDocument();
   });
 
-  it('Sweet-Spot-Bars haben Amber-Fill, andere Primary-Fill', () => {
+  it('Sweet-Spot-Bars haben Pink-Fill (#db2777), andere Primary-Fill', () => {
     const { container } = render(<TopTenBars items={items} runId="run-1" />);
     // Recharts rendert in jsdom <Bar> als <g class="recharts-bar-rectangle"> mit innerem <path>;
     // <Cell> Fill landet auf dem path-Element.
@@ -68,7 +68,7 @@ describe('TopTenBars', () => {
     const rects = container.querySelectorAll('.recharts-bar-rectangle rect');
     const elements = paths.length > 0 ? paths : rects;
     const fills = Array.from(elements).map((c) => c.getAttribute('fill'));
-    // 3 Bars — AAPL und MSFT sind sweet-spot (Amber), NVDA nicht
+    // 3 Bars — AAPL und MSFT sind sweet-spot (Pink), NVDA nicht
     const pinkCount = fills.filter((f) => f === '#db2777').length;
     expect(pinkCount).toBe(2);
   });
