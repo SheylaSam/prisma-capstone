@@ -29,4 +29,11 @@ describe('ModelInfoIcon', () => {
       unmount();
     }
   });
+
+  it('reicht passende colorVar als topBorderColor an InfoPopover', () => {
+    render(<ModelInfoIcon modelKey="quality_classic" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Info zu Quality' }));
+    const content = screen.getByText(/8 klassische Kennzahlen/).parentElement;
+    expect(content?.style.borderTopColor).toBe('hsl(var(--model-quality))');
+  });
 });

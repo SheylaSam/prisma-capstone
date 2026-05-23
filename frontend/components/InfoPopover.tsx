@@ -1,16 +1,21 @@
 'use client';
 
 import { Info } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface Props {
   ariaLabel: string;
   children: ReactNode;
+  topBorderColor?: string;
 }
 
-export function InfoPopover({ ariaLabel, children }: Props) {
+export function InfoPopover({ ariaLabel, children, topBorderColor }: Props) {
+  const contentStyle: CSSProperties | undefined = topBorderColor
+    ? { borderTopColor: topBorderColor, borderTopWidth: 4 }
+    : undefined;
+
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -23,7 +28,11 @@ export function InfoPopover({ ariaLabel, children }: Props) {
           <Info className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="max-w-xs text-sm leading-relaxed" side="top">
+      <PopoverContent
+        className="max-w-xs text-sm leading-relaxed"
+        side="top"
+        style={contentStyle}
+      >
         {children}
       </PopoverContent>
     </Popover>

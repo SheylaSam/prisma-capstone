@@ -8,7 +8,7 @@ interface Props {
 export function ModelInfoIcon({ modelKey }: Props) {
   const info = MODEL_INFO[modelKey];
   return (
-    <InfoPopover ariaLabel={`Info zu ${info.label}`}>
+    <InfoPopover ariaLabel={`Info zu ${info.label}`} topBorderColor={`hsl(${info.colorVar})`}>
       <p>{info.description}</p>
     </InfoPopover>
   );

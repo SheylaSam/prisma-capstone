@@ -56,4 +56,27 @@ describe('InfoPopover', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByText('Quality-Beschreibung')).not.toBeInTheDocument();
   });
+
+  it('rendert Top-Border bei topBorderColor-Prop', () => {
+    render(
+      <InfoPopover ariaLabel="Info" topBorderColor="hsl(var(--model-quality))">
+        <p>Content</p>
+      </InfoPopover>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Info' }));
+    const content = screen.getByText('Content').parentElement;
+    expect(content?.style.borderTopWidth).toBe('4px');
+    expect(content?.style.borderTopColor).toBe('hsl(var(--model-quality))');
+  });
+
+  it('kein Top-Border ohne topBorderColor', () => {
+    render(
+      <InfoPopover ariaLabel="Info">
+        <p>Content</p>
+      </InfoPopover>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Info' }));
+    const content = screen.getByText('Content').parentElement;
+    expect(content?.style.borderTopWidth).toBeFalsy();
+  });
 });
