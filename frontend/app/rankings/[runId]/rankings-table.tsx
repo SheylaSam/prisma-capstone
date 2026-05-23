@@ -76,19 +76,35 @@ interface SortableHeadProps {
   sortDir: SortDir;
   onSort: (key: SortKey) => void;
   infoIcon?: React.ReactNode;
+  indicatorColor?: string;
+  modelKey?: string;
   children: React.ReactNode;
 }
 
-function SortableHead({ sortKey, activeSortKey, sortDir, onSort, infoIcon, children }: SortableHeadProps) {
+function SortableHead({
+  sortKey,
+  activeSortKey,
+  sortDir,
+  onSort,
+  infoIcon,
+  indicatorColor,
+  modelKey,
+  children,
+}: SortableHeadProps) {
   const isActive = activeSortKey === sortKey;
   const ariaSort = isActive ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none';
   const Icon = isActive ? (sortDir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+  const style = indicatorColor
+    ? { boxShadow: `inset 0 -4px 0 ${indicatorColor}` }
+    : undefined;
 
   return (
     <TableHead
       className="cursor-pointer select-none"
       onClick={() => onSort(sortKey)}
       aria-sort={ariaSort}
+      data-model-key={modelKey}
+      style={style}
     >
       <span className="inline-flex items-center gap-1">
         {children}
@@ -113,7 +129,10 @@ function SweetSpotBadge({
   const count = sweetSpotKeys.length;
 
   return (
-    <InfoPopover ariaLabel={`Sweet-Spot-Begründung für ${ticker}`}>
+    <InfoPopover
+      ariaLabel={`Sweet-Spot-Begründung für ${ticker}`}
+      topBorderColor="hsl(var(--sweet-spot))"
+    >
       <p>
         <strong>{ticker}</strong> ist Top-25 % in {labels} ({count}/5 Modellen).
       </p>
@@ -197,7 +216,10 @@ export function RankingsTable({ items, runId }: { items: RankingItem[]; runId: s
               <TableHead>
                 <span className="inline-flex items-center gap-1">
                   Sweet-Spot
-                  <InfoPopover ariaLabel="Sweet-Spot-Definition">
+                  <InfoPopover
+                    ariaLabel="Sweet-Spot-Definition"
+                    topBorderColor="hsl(var(--sweet-spot))"
+                  >
                     <p>{SWEET_SPOT_DEFINITION}</p>
                   </InfoPopover>
                 </span>
@@ -210,6 +232,8 @@ export function RankingsTable({ items, runId }: { items: RankingItem[]; runId: s
                   sortDir={sortDir}
                   onSort={handleSort}
                   infoIcon={<ModelInfoIcon modelKey={col.key} />}
+                  indicatorColor={`hsl(${MODEL_INFO[col.key].colorVar})`}
+                  modelKey={col.key}
                 >
                   {col.label}
                 </SortableHead>

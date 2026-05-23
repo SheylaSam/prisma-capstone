@@ -210,4 +210,19 @@ describe('RankingsTable', () => {
     expect(content).toMatch(/T1 ist Top-25 ?% in/);
     expect(content).toMatch(/5\/5/);
   });
+
+  it('Quality-Header hat box-shadow mit Modell-Quality-Farbe', () => {
+    const { container } = render(<RankingsTable items={sampleItems} runId="test-run-id" />);
+    const qualityHead = container.querySelector<HTMLElement>('[data-model-key="quality_classic"]');
+    expect(qualityHead).not.toBeNull();
+    expect(qualityHead?.style.boxShadow).toContain('var(--model-quality)');
+  });
+
+  it('Sweet-Spot-Definition-Popover hat Pink Top-Border', () => {
+    render(<RankingsTable items={sampleItems} runId="test-run-id" />);
+    const definitionTrigger = screen.getByRole('button', { name: 'Sweet-Spot-Definition' });
+    fireEvent.click(definitionTrigger);
+    const content = screen.getByText(/Top-25 ?% in mindestens 3 von 5/).parentElement;
+    expect(content?.style.borderTopColor).toBe('hsl(var(--sweet-spot))');
+  });
 });
