@@ -44,7 +44,7 @@ async def test_rag_retrieve_ticker_invalid(http_client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_rag_retrieve_default_k(http_client: AsyncClient) -> None:
+async def test_rag_retrieve_default_k(http_client: AsyncClient, truncate_embeddings: None) -> None:
     """Default k=5 wird verwendet."""
     with patch("backend.interfaces.rest.dependencies.get_voyage_client") as mock_voyage:
         mock_voyage.return_value = None
@@ -58,7 +58,7 @@ async def test_rag_retrieve_default_k(http_client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_rag_retrieve_response(http_client: AsyncClient) -> None:
+async def test_rag_retrieve_response(http_client: AsyncClient, truncate_embeddings: None) -> None:
     """Response hat korrekte Struktur."""
     with patch("backend.interfaces.rest.dependencies.LLMClient") as mock_llm_class:
         mock_llm = AsyncMock()
@@ -72,7 +72,7 @@ async def test_rag_retrieve_response(http_client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_rag_retrieve_no_results(http_client: AsyncClient) -> None:
+async def test_rag_retrieve_no_results(http_client: AsyncClient, truncate_embeddings: None) -> None:
     """Bei leerer DB ist total=0."""
     with patch("backend.interfaces.rest.dependencies.LLMClient") as mock_llm_class:
         mock_llm = AsyncMock()
@@ -88,7 +88,7 @@ async def test_rag_retrieve_no_results(http_client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_rag_retrieve_ticker_filter(http_client: AsyncClient) -> None:
+async def test_rag_retrieve_ticker_filter(http_client: AsyncClient, truncate_embeddings: None) -> None:
     """Ticker-Filter wird akzeptiert."""
     with patch("backend.interfaces.rest.dependencies.LLMClient") as mock_llm_class:
         mock_llm = AsyncMock()

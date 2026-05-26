@@ -4,6 +4,7 @@ Pattern: session_factory pro Operation (PR #25-Stil, analog
 SQLAResearchMemoRepository) — vermeidet Transaction-Leaks.
 """
 
+import math
 from uuid import UUID
 
 from sqlalchemy import func, select, text
@@ -156,19 +157,24 @@ class SQLAEmbeddingRepository(EmbeddingRepository):
         async with self._session_factory() as session:
             rows = (await session.execute(text(raw_sql), params)).mappings().all()
 
-        return [
-            RetrievalResult(
-                chunk_id=row["chunk_id"],
-                document_id=row["document_id"],
-                chunk_idx=row["chunk_idx"],
-                content=row["content"],
-                similarity=float(row["similarity"]),
-                ticker=row["ticker"],
-                doc_type=row["doc_type"],
-                metadata=row["metadata"] or {},
+        results = []
+        for row in rows:
+            sim = float(row["similarity"])
+            if math.isnan(sim):
+                continue
+            results.append(
+                RetrievalResult(
+                    chunk_id=row["chunk_id"],
+                    document_id=row["document_id"],
+                    chunk_idx=row["chunk_idx"],
+                    content=row["content"],
+                    similarity=sim,
+                    ticker=row["ticker"],
+                    doc_type=row["doc_type"],
+                    metadata=row["metadata"] or {},
+                )
             )
-            for row in rows
-        ]
+        return results
 
 
 def _orm_to_doc(row: DocumentORM) -> Document:
