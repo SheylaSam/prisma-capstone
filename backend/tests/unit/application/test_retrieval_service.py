@@ -1,8 +1,9 @@
 """Unit-Tests für RetrievalService."""
 
-import pytest
 from unittest.mock import AsyncMock
 from uuid import uuid4
+
+import pytest
 
 from backend.application.services.retrieval_service import RetrievalService
 from backend.domain.entities.retrieval_result import RetrievalResult
