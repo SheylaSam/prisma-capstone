@@ -1,8 +1,9 @@
 """Integration-Tests für RAG-Endpoint."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from httpx import AsyncClient
-from unittest.mock import patch, AsyncMock
 
 
 @pytest.mark.asyncio
@@ -39,7 +40,7 @@ async def test_rag_retrieve_ticker_invalid(http_client: AsyncClient) -> None:
 async def test_rag_retrieve_default_k(http_client: AsyncClient) -> None:
     """Default k=5 wird verwendet."""
     with patch("backend.interfaces.rest.dependencies.get_voyage_client") as mock_voyage:
-        mock_voyage.return_value = None  # Aber RetrievalService nutzt AsyncMock
+        mock_voyage.return_value = None
         with patch("backend.interfaces.rest.dependencies.LLMClient") as mock_llm_class:
             mock_llm = AsyncMock()
             mock_llm.embed.return_value = [[0.0] * 2048]
