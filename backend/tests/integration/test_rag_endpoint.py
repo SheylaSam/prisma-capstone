@@ -88,7 +88,9 @@ async def test_rag_retrieve_no_results(http_client: AsyncClient, truncate_embedd
 
 
 @pytest.mark.asyncio
-async def test_rag_retrieve_ticker_filter(http_client: AsyncClient, truncate_embeddings: None) -> None:
+async def test_rag_retrieve_ticker_filter(
+    http_client: AsyncClient, truncate_embeddings: None
+) -> None:
     """Ticker-Filter wird akzeptiert."""
     with patch("backend.interfaces.rest.dependencies.LLMClient") as mock_llm_class:
         mock_llm = AsyncMock()
