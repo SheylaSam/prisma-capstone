@@ -733,3 +733,11 @@ LLM-Code mit StubClient grün ≠ production-ready. Mindestens 1× gegen echte A
 - **Autor**: Sheyla Sampietro (mit Claude Code)
 
 <!-- Neue Einträge oben an die Liste anfügen. -->
+
+## 2026-05-26 · RAG-Pipeline Slice 2+3 (Issue #18)
+
+- **Agent**: Claude Code (Haiku 4.5 + Subagent-Driven-Development)
+- **Scope**: 17-Task Implementation: Domain-Dataclass → RetrievalService → REST-Endpoint → 15 Tests + Ingestion-Script
+- **Was gut lief**: Erkannt dass Slice 1 >50% Infra bereits lieferte. Focused auf fehlende Teile. TDD natural. Subagent-Driven mit fresh context pro Task optimal für unabhängige Tasks.
+- **Was nicht klappte**: Anfängliches Code-Reading zu spät. Initial Branch-Organisation (commits auf falschen Branch). Ingestion-Script nur Stub-Level.
+- **Nachbearbeitung nötig bei**: Voyage-API-Integrationstests, Postgres halfvec-Casting robustness, E2E-Smoke gegen echtes EDGAR.
