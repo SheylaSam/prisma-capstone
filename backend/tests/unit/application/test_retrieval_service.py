@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 from backend.application.services.retrieval_service import RetrievalService
-from backend.domain.repositories.embedding_repository import EmbeddingRepository
 from backend.domain.entities.retrieval_result import RetrievalResult
+from backend.domain.repositories.embedding_repository import EmbeddingRepository
 
 
 @pytest.fixture
