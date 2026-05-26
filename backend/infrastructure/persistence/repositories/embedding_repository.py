@@ -147,7 +147,9 @@ class SQLAEmbeddingRepository(EmbeddingRepository):
             ORDER BY (ec.embedding::halfvec(2048)) <=> (:query::vector(2048)::halfvec(2048))
             LIMIT :k
         """
-        params: dict[str, object] = {"query": str(query_embedding), "k": k}
+        # Convert list to PostgreSQL vector format: [0.1, 0.2, ...] -> "[0.1, 0.2, ...]"
+        query_vector_str = "[" + ",".join(str(x) for x in query_embedding[0]) + "]"
+        params: dict[str, object] = {"query": query_vector_str, "k": k}
         if ticker:
             params["ticker"] = ticker
 
