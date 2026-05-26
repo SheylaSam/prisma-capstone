@@ -148,7 +148,7 @@ class SQLAEmbeddingRepository(EmbeddingRepository):
             LIMIT :k
         """
         # Convert list to PostgreSQL vector format: [0.1, 0.2, ...] -> "[0.1, 0.2, ...]"
-        query_vector_str = "[" + ",".join(str(x) for x in query_embedding[0]) + "]"
+        query_vector_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
         params: dict[str, object] = {"query": query_vector_str, "k": k}
         if ticker:
             params["ticker"] = ticker
