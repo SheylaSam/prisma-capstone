@@ -24,7 +24,10 @@ class UniverseSyncResult:
 
 
 class UniverseService:
-    """Kapselt die Geschäftslogik rund um Universe-Operationen."""
+    """Kapselt die Geschäftslogik rund um Universe-Operationen.
+
+    Abhängigkeiten: UniverseRepository, FundamentalsProvider, MarketDataProvider.
+    """
 
     def __init__(
         self,

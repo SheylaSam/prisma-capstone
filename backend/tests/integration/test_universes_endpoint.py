@@ -213,7 +213,23 @@ async def test_sync_universe_unknown_id_returns_404(http_client: AsyncClient) ->
     assert response.status_code == 404
 
 
-async def test_sync_universe_synced_count_equals_ticker_count(http_client: AsyncClient) -> None:
+async def test_sync_universe_sp500_synced_count_is_positive(http_client: AsyncClient) -> None:
+    """S&P-500-Subset (AAPL, MSFT) liegen im StubFundamentalsProvider — synced_count > 0."""
+    body = (await http_client.post(f"/api/v1/universes/{_SP500_ID}/sync")).json()
+    assert body["synced_count"] > 0
+    assert body["synced_count"] + len(body["failed_tickers"]) == 2  # SP500 hat 2 Tickers
+
+
+async def test_sync_universe_smi_tickers_not_in_stub_land_in_failed(
+    http_client: AsyncClient,
+) -> None:
+    """SMI-Tickers (NESN/NOVN/ROG) fehlen im StubFundamentalsProvider → alle failed."""
     body = (await http_client.post(f"/api/v1/universes/{_SMI_ID}/sync")).json()
-    # StubFundamentalsProvider and StubMarketDataProvider cover all tickers
-    assert body["synced_count"] + len(body["failed_tickers"]) == 3  # SMI has 3 tickers
+    assert body["synced_count"] == 0
+    assert set(body["failed_tickers"]) == {"NESN", "NOVN", "ROG"}
+
+
+async def test_sync_universe_ticker_count_invariant(http_client: AsyncClient) -> None:
+    """synced_count + len(failed_tickers) == Anzahl Tickers im Universum (immer)."""
+    body = (await http_client.post(f"/api/v1/universes/{_SMI_ID}/sync")).json()
+    assert body["synced_count"] + len(body["failed_tickers"]) == 3  # SMI hat 3 Tickers

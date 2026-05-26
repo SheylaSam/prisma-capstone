@@ -132,6 +132,14 @@ LLM-Code mit StubClient grün ≠ production-ready. Mindestens 1× gegen echte A
 
 ## Einträge
 
+## 2026-05-26 · POST /api/v1/universes/{id}/sync — Ticker-Stocks-Sync (Issue #114, PR #133)
+- **Agent**: Claude Code (Sonnet 4.6) — superpowers:writing-plans + subagent-driven-development
+- **Scope**: `UniverseService.sync_universe()` + REST-Endpoint + 8 Integration-Tests. Service prüft Verfügbarkeit via FundamentalsProvider + MarketDataProvider, liefert `UniverseSyncResult(synced_count, failed_tickers)`.
+- **Was gut lief**: Clean-Architecture-Schichten sauber eingehalten (kein REST-Leak ins Application-Layer). DI-Pattern konsequent: Providers via `__init__`, Exception-Logging vorhanden.
+- **Was nicht klappte**: Test `test_sync_universe_synced_count_equals_ticker_count` verwendete SMI-Tickers (NESN/NOVN/ROG), die im `StubFundamentalsProvider` nicht existieren — `synced_count=0` war garantiert, aber der Test-Kommentar behauptete das Gegenteil. Reviewer-Feedback (SheylaSam + itsFabia) deckte auf, dass kein Test `synced_count > 0` verifiziierte. Fix: Test auf `_SP500_ID` (AAPL/MSFT, im Stub vorhanden) umgestellt + separaten Test für SMI-Fehlerpfad ergänzt.
+- **Nachbearbeitung nötig bei**: `test_universes_endpoint.py` (Sync-Tests), `universe_service.py` (Docstring).
+- **Autor**: Andrea Petretta (mit Claude Code)
+
 ## 2026-05-19 · Backtest `_simulate_portfolio` mit Drift + Monthly-Reset (Issue #140)
 - **Agent**: Claude Code (Opus 4.7)
 - **Scope**: `_simulate_portfolio` an Backtest-Light-Spec v1.1 §5 angeglichen. Bestehende Impl (`returns.mean(axis=1)`) war mathematisch ein taeglich-rebalanciertes Equal-Weight-Portfolio — entsprach NICHT der Spec (Drift + monatlicher Reset). Neuer Helper `_monthly_rebalance_dates` per `pd.Grouper(freq="ME")`. TDD-Workflow: 8 Unit-Tests in neuer Datei `test_backtest_portfolio_simulation.py` (Drift-, Reset-, Edge-Case- und Sanity-Tests), erst rot, dann Rewrite.
