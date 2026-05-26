@@ -30,8 +30,15 @@ class TestRetrievalService:
     async def test_retrieve_basic(self, service, mock_repo, mock_llm) -> None:
         mock_llm.embed.return_value = [[0.1] * 2048]
         mock_repo.find_nearest.return_value = [
-            RetrievalResult(chunk_id=uuid4(), document_id=uuid4(), chunk_idx=0,
-                          content="Apple", similarity=0.95, ticker="AAPL", doc_type="10-K")
+            RetrievalResult(
+                chunk_id=uuid4(),
+                document_id=uuid4(),
+                chunk_idx=0,
+                content="Apple",
+                similarity=0.95,
+                ticker="AAPL",
+                doc_type="10-K",
+            )
         ]
         results = await service.retrieve("Apple", k=5)
         assert len(results) == 1 and results[0].similarity == 0.95

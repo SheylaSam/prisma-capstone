@@ -19,9 +19,7 @@ async def retrieve(
     service: RetrievalService = Depends(get_retrieval_service),
 ) -> RetrieveResponse:
     """POST /api/v1/rag/retrieve — Semantische Suche über SEC-Filing-Chunks."""
-    results = await service.retrieve(
-        query=request.query, k=request.k, ticker=request.ticker
-    )
+    results = await service.retrieve(query=request.query, k=request.k, ticker=request.ticker)
     return RetrieveResponse(
         results=[
             ChunkResponse(
