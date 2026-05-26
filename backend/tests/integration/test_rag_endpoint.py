@@ -2,6 +2,7 @@
 
 import pytest
 from httpx import AsyncClient
+from unittest.mock import patch, AsyncMock
 
 
 @pytest.mark.asyncio
@@ -37,27 +38,49 @@ async def test_rag_retrieve_ticker_invalid(http_client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_rag_retrieve_default_k(http_client: AsyncClient) -> None:
     """Default k=5 wird verwendet."""
-    response = await http_client.post("/api/v1/rag/retrieve", json={"query": "test query"})
-    assert response.status_code == 200
+    with patch("backend.interfaces.rest.dependencies.get_voyage_client") as mock_voyage:
+        mock_voyage.return_value = None  # Aber RetrievalService nutzt AsyncMock
+        with patch("backend.interfaces.rest.dependencies.LLMClient") as mock_llm_class:
+            mock_llm = AsyncMock()
+            mock_llm.embed.return_value = [[0.0] * 2048]
+            mock_llm_class.return_value = mock_llm
+            
+            response = await http_client.post("/api/v1/rag/retrieve", json={"query": "test query"})
+            assert response.status_code == 200
 
 @pytest.mark.asyncio
 async def test_rag_retrieve_response(http_client: AsyncClient) -> None:
     """Response hat korrekte Struktur."""
-    response = await http_client.post("/api/v1/rag/retrieve", json={"query": "test", "k": 5})
-    assert response.status_code == 200
-    data = response.json()
-    assert "total" in data and "results" in data
+    with patch("backend.interfaces.rest.dependencies.LLMClient") as mock_llm_class:
+        mock_llm = AsyncMock()
+        mock_llm.embed.return_value = [[0.0] * 2048]
+        mock_llm_class.return_value = mock_llm
+        
+        response = await http_client.post("/api/v1/rag/retrieve", json={"query": "test", "k": 5})
+        assert response.status_code == 200
+        data = response.json()
+        assert "total" in data and "results" in data
 
 @pytest.mark.asyncio
 async def test_rag_retrieve_no_results(http_client: AsyncClient) -> None:
     """Bei leerer DB ist total=0."""
-    response = await http_client.post("/api/v1/rag/retrieve", json={"query": "nonexistent", "k": 5})
-    assert response.status_code == 200
-    data = response.json()
-    assert data["total"] == 0
+    with patch("backend.interfaces.rest.dependencies.LLMClient") as mock_llm_class:
+        mock_llm = AsyncMock()
+        mock_llm.embed.return_value = [[0.0] * 2048]
+        mock_llm_class.return_value = mock_llm
+        
+        response = await http_client.post("/api/v1/rag/retrieve", json={"query": "nonexistent", "k": 5})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 0
 
 @pytest.mark.asyncio
 async def test_rag_retrieve_ticker_filter(http_client: AsyncClient) -> None:
     """Ticker-Filter wird akzeptiert."""
-    response = await http_client.post("/api/v1/rag/retrieve", json={"query": "test", "k": 5, "ticker": "AAPL"})
-    assert response.status_code == 200
+    with patch("backend.interfaces.rest.dependencies.LLMClient") as mock_llm_class:
+        mock_llm = AsyncMock()
+        mock_llm.embed.return_value = [[0.0] * 2048]
+        mock_llm_class.return_value = mock_llm
+        
+        response = await http_client.post("/api/v1/rag/retrieve", json={"query": "test", "k": 5, "ticker": "AAPL"})
+        assert response.status_code == 200
