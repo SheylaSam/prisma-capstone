@@ -13,10 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.domain.entities.document import Document
 from backend.domain.entities.embedding_chunk import EmbeddingChunk
+from backend.domain.entities.retrieval_result import RetrievalResult
 from backend.domain.repositories.embedding_repository import (
     DuplicateUrl,
     EmbeddingRepository,
-    RetrievalResult,
 )
 from backend.infrastructure.persistence.models.embedding import (
     DocumentORM,

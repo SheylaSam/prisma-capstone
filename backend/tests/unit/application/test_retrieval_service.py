@@ -27,7 +27,12 @@ def service(mock_repo: AsyncMock, mock_llm: AsyncMock) -> RetrievalService:
 
 class TestRetrievalService:
     @pytest.mark.asyncio
-    async def test_retrieve_basic(self, service, mock_repo, mock_llm) -> None:
+    async def test_retrieve_basic(
+        self: "TestRetrievalService",
+        service: RetrievalService,
+        mock_repo: AsyncMock,
+        mock_llm: AsyncMock,
+    ) -> None:
         mock_llm.embed.return_value = [[0.1] * 2048]
         mock_repo.find_nearest.return_value = [
             RetrievalResult(
@@ -44,20 +49,35 @@ class TestRetrievalService:
         assert len(results) == 1 and results[0].similarity == 0.95
 
     @pytest.mark.asyncio
-    async def test_k_capped(self, service, mock_repo, mock_llm) -> None:
+    async def test_k_capped(
+        self: "TestRetrievalService",
+        service: RetrievalService,
+        mock_repo: AsyncMock,
+        mock_llm: AsyncMock,
+    ) -> None:
         mock_llm.embed.return_value = [[0.0] * 2048]
         mock_repo.find_nearest.return_value = []
         await service.retrieve("test", k=50)
         assert mock_repo.find_nearest.call_args[1]["k"] == 20
 
     @pytest.mark.asyncio
-    async def test_no_embedding(self, service, mock_repo, mock_llm) -> None:
+    async def test_no_embedding(
+        self: "TestRetrievalService",
+        service: RetrievalService,
+        mock_repo: AsyncMock,
+        mock_llm: AsyncMock,
+    ) -> None:
         mock_llm.embed.return_value = []
         results = await service.retrieve("test")
         assert results == []
 
     @pytest.mark.asyncio
-    async def test_multiple_results(self, service, mock_repo, mock_llm) -> None:
+    async def test_multiple_results(
+        self: "TestRetrievalService",
+        service: RetrievalService,
+        mock_repo: AsyncMock,
+        mock_llm: AsyncMock,
+    ) -> None:
         mock_llm.embed.return_value = [[0.0] * 2048]
         mock_repo.find_nearest.return_value = [
             RetrievalResult(uuid4(), uuid4(), 0, "c1", 0.95, "AAPL", "10-K"),
@@ -67,14 +87,24 @@ class TestRetrievalService:
         assert len(results) == 2
 
     @pytest.mark.asyncio
-    async def test_default_k(self, service, mock_repo, mock_llm) -> None:
+    async def test_default_k(
+        self: "TestRetrievalService",
+        service: RetrievalService,
+        mock_repo: AsyncMock,
+        mock_llm: AsyncMock,
+    ) -> None:
         mock_llm.embed.return_value = [[0.0] * 2048]
         mock_repo.find_nearest.return_value = []
         await service.retrieve("test")
         assert mock_repo.find_nearest.call_args[1]["k"] == 5
 
     @pytest.mark.asyncio
-    async def test_ticker_filter(self, service, mock_repo, mock_llm) -> None:
+    async def test_ticker_filter(
+        self: "TestRetrievalService",
+        service: RetrievalService,
+        mock_repo: AsyncMock,
+        mock_llm: AsyncMock,
+    ) -> None:
         mock_llm.embed.return_value = [[0.0] * 2048]
         mock_repo.find_nearest.return_value = []
         await service.retrieve("test", ticker="AAPL")
