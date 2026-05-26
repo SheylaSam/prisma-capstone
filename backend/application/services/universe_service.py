@@ -1,5 +1,6 @@
 """UniverseService — Use-Case-Orchestrierung für Universe-CRUD."""
 
+import logging
 import uuid
 from dataclasses import dataclass, field
 
@@ -7,6 +8,8 @@ from backend.domain.entities.universe import Universe
 from backend.domain.ports.fundamentals_provider import FundamentalsProvider
 from backend.domain.ports.market_data_provider import MarketDataProvider
 from backend.domain.repositories.universe_repository import UniverseRepository
+
+_logger = logging.getLogger(__name__)
 
 
 class UniverseNotFound(Exception):
@@ -21,13 +24,17 @@ class UniverseSyncResult:
 
 
 class UniverseService:
-    """Kapselt die Geschäftslogik rund um Universe-Operationen.
+    """Kapselt die Geschäftslogik rund um Universe-Operationen."""
 
-    Kennt nur den abstrakten UniverseRepository-Port.
-    """
-
-    def __init__(self, repository: UniverseRepository) -> None:
+    def __init__(
+        self,
+        repository: UniverseRepository,
+        fundamentals_provider: FundamentalsProvider,
+        market_data_provider: MarketDataProvider,
+    ) -> None:
         self._repository = repository
+        self._fundamentals_provider = fundamentals_provider
+        self._market_data_provider = market_data_provider
 
     async def list_universes(self) -> list[Universe]:
         return await self._repository.list()
@@ -53,25 +60,22 @@ class UniverseService:
         await self._repository.save(universe)
         return universe
 
-    async def sync_universe(
-        self,
-        universe_id: uuid.UUID,
-        fundamentals_provider: FundamentalsProvider,
-        market_data_provider: MarketDataProvider,
-    ) -> UniverseSyncResult:
+    async def sync_universe(self, universe_id: uuid.UUID) -> UniverseSyncResult:
         universe = await self.get_universe(universe_id)
         tickers = list(universe.tickers)
         failed: list[str] = []
 
         try:
-            fundamentals = await fundamentals_provider.get_fundamentals(tickers)
-        except Exception:
+            fundamentals = await self._fundamentals_provider.get_fundamentals(tickers)
+        except Exception as exc:
+            _logger.warning("FundamentalsProvider failed for tickers %s: %s", tickers, exc)
             fundamentals = {}
 
         try:
-            prices = await market_data_provider.get_prices(tickers)
-            price_tickers = set(prices.columns.tolist())
-        except Exception:
+            prices = await self._market_data_provider.get_prices(tickers)
+            price_tickers = set(prices.columns.tolist()) if not prices.empty else set()
+        except Exception as exc:
+            _logger.warning("MarketDataProvider failed for tickers %s: %s", tickers, exc)
             price_tickers = set()
 
         for ticker in tickers:

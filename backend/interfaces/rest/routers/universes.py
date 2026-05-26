@@ -5,13 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.application.services.universe_service import UniverseNotFound, UniverseService
-from backend.domain.ports.fundamentals_provider import FundamentalsProvider
-from backend.domain.ports.market_data_provider import MarketDataProvider
-from backend.interfaces.rest.dependencies import (
-    get_fundamentals_provider,
-    get_market_data_provider,
-    get_universe_service,
-)
+from backend.interfaces.rest.dependencies import get_universe_service
 from backend.interfaces.rest.schemas.universe import (
     UniverseCreateRequest,
     UniverseListResponse,
@@ -84,15 +78,9 @@ async def create_universe(
 async def sync_universe(
     universe_id: UUID,
     service: UniverseService = Depends(get_universe_service),
-    fundamentals: FundamentalsProvider = Depends(get_fundamentals_provider),
-    market_data: MarketDataProvider = Depends(get_market_data_provider),
 ) -> UniverseSyncResponse:
     try:
-        result = await service.sync_universe(
-            universe_id=universe_id,
-            fundamentals_provider=fundamentals,
-            market_data_provider=market_data,
-        )
+        result = await service.sync_universe(universe_id=universe_id)
     except UniverseNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return UniverseSyncResponse(
