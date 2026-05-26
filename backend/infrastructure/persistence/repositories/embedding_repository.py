@@ -130,6 +130,8 @@ class SQLAEmbeddingRepository(EmbeddingRepository):
         # halfvec-Cast auf Query und Column, damit der HNSW-Index genutzt wird.
         # JOIN documents bringt ticker und doc_type mit.
         ticker_filter = "AND d.ticker = :ticker" if ticker else ""
+        # Convert list to PostgreSQL vector format: [0.1, 0.2, ...] -> "'[0.1, 0.2, ...]'::vector"
+        query_vector_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
         raw_sql = f"""
             SELECT
                 ec.id          AS chunk_id,
@@ -139,17 +141,15 @@ class SQLAEmbeddingRepository(EmbeddingRepository):
                 ec.metadata,
                 d.ticker,
                 d.doc_type,
-                1 - ((ec.embedding::halfvec(2048)) <=> (:query::vector(2048)::halfvec(2048)))
+                1 - ((ec.embedding::halfvec(2048)) <=> ('{query_vector_str}'::vector(2048)::halfvec(2048)))
                                AS similarity
             FROM embedding_chunks ec
             JOIN documents d ON d.id = ec.document_id
             WHERE 1=1 {ticker_filter}
-            ORDER BY (ec.embedding::halfvec(2048)) <=> (:query::vector(2048)::halfvec(2048))
+            ORDER BY (ec.embedding::halfvec(2048)) <=> ('{query_vector_str}'::vector(2048)::halfvec(2048))
             LIMIT :k
         """
-        # Convert list to PostgreSQL vector format: [0.1, 0.2, ...] -> "[0.1, 0.2, ...]"
-        query_vector_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
-        params: dict[str, object] = {"query": query_vector_str, "k": k}
+        params: dict[str, object] = {"k": k}
         if ticker:
             params["ticker"] = ticker
 
