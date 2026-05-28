@@ -3,6 +3,7 @@
 Spec: docs/specs/2026-05-09-ranking-service-multi-model.md
 """
 
+import logging
 import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -261,3 +262,80 @@ async def test_create_and_execute_run_writes_stock_id_in_results(
     for entry in rankings:
         assert "stock_id" in entry
         assert entry["stock_id"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Partial-catalog fixture (only AAPL + MSFT known)
+# ---------------------------------------------------------------------------
+
+_PARTIAL_CATALOG_TICKERS = ("AAPL", "MSFT")
+_UNKNOWN_TICKERS = ("GOOGL", "NVDA", "JPM")
+
+
+@pytest_asyncio.fixture
+async def service_setup_partial_catalog() -> AsyncGenerator[
+    tuple[RankingRunService, uuid.UUID], None
+]:
+    """Universe hat alle 5 Ticker, StockService kennt nur AAPL + MSFT."""
+    universe_repo = InMemoryUniverseRepository()
+    run_repo = InMemoryRankingRunRepository()
+    fundamentals = StubFundamentalsAllGood()
+    market_data = StubMarketDataProvider(end_date=pd.Timestamp("2026-05-09", tz="UTC"))
+    stock_service = InMemoryStockService(list(_PARTIAL_CATALOG_TICKERS))
+
+    universe_id = uuid.uuid4()
+    await universe_repo.save(
+        Universe(
+            id=universe_id,
+            name="Partial Catalog Universe",
+            tickers=_UNIVERSE_TICKERS,
+            region="US",
+        )
+    )
+
+    service = RankingRunService(
+        universe_repo=universe_repo,
+        run_repo=run_repo,
+        fundamentals_provider=fundamentals,
+        market_data_provider=market_data,
+        stock_service=stock_service,
+    )
+    yield service, universe_id
+
+
+async def test_unknown_tickers_get_none_stock_id(
+    service_setup_partial_catalog: tuple[RankingRunService, uuid.UUID],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Ticker im Universe aber nicht im StockService → stock_id == None + Warning geloggt."""
+    service, universe_id = service_setup_partial_catalog
+
+    with caplog.at_level(
+        logging.WARNING, logger="backend.application.services.ranking_run_service"
+    ):
+        run = await service.create_and_execute_run(universe_id=universe_id)
+
+    rankings = await service.get_rankings(run.id)
+    assert len(rankings) == 5
+
+    by_ticker = {r["ticker"]: r for r in rankings}
+
+    # Bekannte Ticker müssen valide UUIDs haben
+    for ticker in _PARTIAL_CATALOG_TICKERS:
+        entry = by_ticker[ticker]
+        assert entry["stock_id"] is not None, f"{ticker} sollte eine stock_id haben"
+        parsed = uuid.UUID(entry["stock_id"])
+        expected = uuid.uuid5(InMemoryStockService._NS, ticker)
+        assert parsed == expected
+
+    # Unbekannte Ticker müssen stock_id == None haben
+    for ticker in _UNKNOWN_TICKERS:
+        entry = by_ticker[ticker]
+        assert entry["stock_id"] is None, f"{ticker} sollte stock_id None haben"
+
+    # Warning muss für jeden unbekannten Ticker geloggt worden sein
+    warning_messages = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+    for ticker in _UNKNOWN_TICKERS:
+        assert any(ticker in msg for msg in warning_messages), (
+            f"Kein Warning-Log für unbekannten Ticker {ticker}"
+        )

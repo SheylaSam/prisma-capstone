@@ -1,6 +1,7 @@
 """RankingRunService — orchestriert Erstellung und Ausführung von Ranking-Läufen."""
 
 import asyncio
+import logging
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -18,6 +19,8 @@ from backend.domain.ports.fundamentals_provider import FundamentalsProvider
 from backend.domain.ports.market_data_provider import MarketDataProvider
 from backend.domain.repositories.ranking_run_repository import RankingRunRepository
 from backend.domain.repositories.universe_repository import UniverseRepository
+
+_logger = logging.getLogger(__name__)
 
 
 class UniverseNotFound(Exception):
@@ -91,7 +94,15 @@ class RankingRunService:
         stock_id_by_ticker: dict[str, str | None] = {}
         for ticker in tickers_in_results:
             stock = await self._stock_service.get_by_ticker(ticker)
-            stock_id_by_ticker[ticker] = str(stock.id) if stock else None
+            if stock is None:
+                _logger.warning(
+                    "stock_id lookup failed for ticker %s in run %s — Memo-Drilldown will be disabled for this row",
+                    ticker,
+                    run.id,
+                )
+                stock_id_by_ticker[ticker] = None
+            else:
+                stock_id_by_ticker[ticker] = str(stock.id)
 
         results: list[dict[str, Any]] = sorted(
             [
