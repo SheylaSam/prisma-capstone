@@ -9,7 +9,7 @@ const baseMemo: Memo = {
   stock_id: 'stock-1',
   model_run_id: 'run-1',
   language: 'de',
-  one_liner: 'Solide Quality-Geschichte mit Trend-Rückenwind.',
+  one_liner: 'Solide Wachstums-Geschichte mit Trend-Rückenwind.',
   ranking_interpretation: 'Stock liegt im Top-Quintil aller 5 Modelle.',
   sweet_spot: false,
   sweet_spot_explanation: null,
@@ -25,7 +25,7 @@ const baseMemo: Memo = {
 describe('MemoContent', () => {
   it('renders one_liner as hero', () => {
     render(<MemoContent memo={baseMemo} />);
-    expect(screen.getByText(/Solide Quality-Geschichte/)).toBeDefined();
+    expect(screen.getByText(/Solide Wachstums-Geschichte/)).toBeDefined();
   });
 
   it('renders all key_strengths', () => {
