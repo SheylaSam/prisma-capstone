@@ -112,7 +112,7 @@ class InMemoryStockService(StockService):
             for t in tickers
         }
 
-    async def get_by_ticker(self, ticker: str) -> Stock | None:  # type: ignore[override]
+    async def get_by_ticker(self, ticker: str) -> Stock | None:
         return self._by_ticker.get(ticker.upper())
 
 
