@@ -33,11 +33,11 @@ Drei Layer, klar getrennt:
 
 **`backend/interfaces/rest/schemas/runs.py`:**
 
-`RankingItem` Response-Schema um `stock_id: UUID` erweitern:
+`RankingItem` Response-Schema um `stock_id: UUID | None` erweitern:
 
 ```python
 class RankingItem(BaseModel):
-    stock_id: UUID  # NEU
+    stock_id: UUID | None = None  # NEU — Optional für Backwards-Compat mit alten Runs
     ticker: str
     total_rank: int | None
     weighted_avg: float | None
@@ -45,7 +45,11 @@ class RankingItem(BaseModel):
     per_model_ranks: dict[str, int | None]
 ```
 
-**Service-Mapping (`RankingsService` oder Repository):** `stock_id` aus dem DB-Join mitliefern. Vorhandene Query joint vermutlich bereits `stocks`-Tabelle für den Ticker — nur ein zusätzliches Feld in der Projektion.
+`Optional` weil Rankings als JSONB-Snapshot in `ranking_runs.results` persistiert sind — alte Runs in der DB haben `stock_id` nicht im JSONB-Blob. Neue Runs (post-Merge) liefern es. Frontend muss `null` graceful behandeln (Sheet öffnet nicht / "Memo nicht verfügbar"-Tooltip).
+
+**Service (`backend/application/services/ranking_run_service.py:87-101`):**
+
+Beim Bauen des `results`-JSONB nach dem Run-Compute: für jeden `ticker` die `stock_id` via existing `StockService.get_by_ticker(ticker)` (oder direkter Repo-Call) auflösen und im dict einsetzen. Für eine typische Demo (5-30 Stocks) ist sequenzieller Lookup akzeptabel; Bulk-Lookup als Optimierung in Folge-PR.
 
 **Memo-Endpoints bleiben unverändert** (`POST /memos/generate`, `GET /memos/{stock_id}/{run_id}` sind ausreichend).
 
@@ -56,10 +60,11 @@ class RankingItem(BaseModel):
 Vollständiges Memo-Schema (analog Backend `MemoResponse`):
 
 ```ts
+// Spiegelt backend/domain/entities/research_memo.py:ContradictionItem
 export interface ContradictionItem {
-  pro_argument: string;
-  contra_argument: string;
-  resolution: string;
+  model_a: string;       // z.B. "Quality"
+  model_b: string;       // z.B. "Value"
+  description: string;   // max 200 Zeichen — was ist der Widerspruch?
 }
 
 export interface Memo {
@@ -107,9 +112,8 @@ export function generateMemo(stockId: string, runId: string, language?: 'de' | '
 │ • strength 2       │  • risk 2             │
 ├────────────────────────────────────────────┤
 │ ⚡ Widersprüche                            │  ← nur wenn contradictions.length > 0
-│ Pro: {pro_argument}                        │
-│ Contra: {contra_argument}                  │
-│ → {resolution}                             │
+│ {model_a} ↔ {model_b}                      │
+│ {description}                              │
 ├────────────────────────────────────────────┤
 │ Interpretation                             │
 │ {ranking_interpretation}                   │
@@ -245,11 +249,14 @@ GET /api/v1/memos/{stock_id}/{run_id}
 
 ## Build Sequence (für writing-plans)
 
-1. Backend: `RankingItem.stock_id` ergänzen + Service-Mapping + Test
-2. Frontend API: `memos.ts` erweitern (Memo-Schema, `getMemo`)
-3. Frontend Hook: `useStockMemo`
-4. Frontend Component: `MemoContent` (Präsentation)
-5. Frontend Component: `MemoSheet` (Wrapper + States)
-6. Frontend Integration: `RankingsTable` Row-Click + Sheet-State
-7. Frontend Integration: `MemoPanel` (Stub durch echte Komponente ersetzen)
-8. Manual Test: Demo-Run mit ≥1 vorgeneriertem Memo
+1. Backend: `RankingItem.stock_id` (Optional) ergänzen + Test
+2. Backend: `stock_id` in `ranking_run_service.py` JSONB-Build ergänzen + Test
+3. Frontend: shadcn `Sheet` installieren (`npx shadcn@latest add sheet`)
+4. Frontend API: `memos.ts` erweitern (vollständiges Memo-Schema, `getMemo`)
+5. Frontend Hook: `useStockMemo` + Test
+6. Frontend Component: `MemoContent` (Präsentation) + Test
+7. Frontend Components: `MemoEmpty` + `MemoErrorCard` (Sub-States) + Test
+8. Frontend Component: `MemoSheet` (Wrapper + State-Machine) + Test
+9. Frontend Integration: `RankingsTable` Row-Click + Sheet-State + Test-Update
+10. Frontend Integration: `MemoPanel` Stub ersetzen + `factsheet-view.tsx` stock_id durchreichen + Test
+11. Manual Test: Demo-Run mit ≥1 vorgeneriertem Memo
