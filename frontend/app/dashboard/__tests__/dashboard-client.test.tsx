@@ -40,7 +40,15 @@ describe('DashboardClient — StatsCards-Integration', () => {
       total: 1,
     });
     vi.spyOn(stocksApi, 'listStocks').mockResolvedValue({
-      items: [],
+      items: Array.from({ length: 5 }, (_, i) => ({
+        id: `stock-${i}`,
+        ticker: `T${i}`,
+        name: `Test ${i}`,
+        isin: null,
+        sector: null,
+        country: null,
+        currency: 'USD',
+      })),
       total: 5,
     });
     vi.spyOn(runsApi, 'getRankings').mockResolvedValue([

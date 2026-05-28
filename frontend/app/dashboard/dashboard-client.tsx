@@ -70,7 +70,8 @@ export function DashboardClient() {
 
   const latestRun = runs?.[0] ?? null;
   const universeCount = universesData?.items.length ?? 0;
-  const stockCount = stocksTotalQuery.data?.total ?? 0;
+  // Backend's `total`-Field ist buggy (siehe lib/api/stocks.ts) → items.length nutzen.
+  const stockCount = stocksTotalQuery.data?.items.length ?? 0;
   const topPickItem = rankingsQuery.data?.find((r) => r.total_rank === 1);
   const topPick: TopPick | null =
     topPickItem && latestCompletedRun
