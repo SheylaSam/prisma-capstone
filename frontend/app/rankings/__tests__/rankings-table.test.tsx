@@ -6,6 +6,7 @@ import type { RankingItem } from '@/lib/api/runs';
 
 const sampleItems: RankingItem[] = [
   {
+    stock_id: null,
     ticker: 'AAPL',
     total_rank: 1,
     weighted_avg: 2.1,
@@ -19,6 +20,7 @@ const sampleItems: RankingItem[] = [
     },
   },
   {
+    stock_id: null,
     ticker: 'MSFT',
     total_rank: 2,
     weighted_avg: 2.4,
@@ -184,6 +186,7 @@ describe('RankingsTable', () => {
 
   it('Klick auf Sweet-Spot-Badge zeigt ticker-spezifische Modell-Liste', () => {
     const sweetSpotSample: RankingItem[] = Array.from({ length: 20 }, (_, i) => ({
+      stock_id: null,
       ticker: `T${i + 1}`,
       total_rank: i + 1,
       weighted_avg: i + 1,
