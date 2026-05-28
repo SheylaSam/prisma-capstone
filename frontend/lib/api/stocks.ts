@@ -43,3 +43,12 @@ export function getFactsheet(ticker: string): Promise<StockFactsheet> {
 export function getPrices(ticker: string, days = 252): Promise<PriceSeriesResponse> {
   return apiFetch<PriceSeriesResponse>(`/api/v1/stocks/${ticker}/prices?days=${days}`);
 }
+
+export interface StockListResponse {
+  items: StockRead[];
+  total: number;
+}
+
+export function listStocks(limit = 1, offset = 0): Promise<StockListResponse> {
+  return apiFetch<StockListResponse>(`/api/v1/stocks?limit=${limit}&offset=${offset}`);
+}
