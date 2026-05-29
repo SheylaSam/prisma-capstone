@@ -1,7 +1,8 @@
 """Integrationstests für /api/v1/universes gegen die Test-App mit InMemory-Repository."""
 
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
+from contextlib import AbstractAsyncContextManager as AsyncContextManager
 from uuid import UUID
 
 import pytest
@@ -204,11 +205,11 @@ from backend.interfaces.rest.dependencies import get_universe_suggestion_service
 @pytest_asyncio.fixture
 async def make_client_with_suggest(
     in_memory_universe_repo: InMemoryUniverseRepository,
-):
+) -> Callable[[object], AsyncContextManager[AsyncClient]]:
     """Factory-Fixture: nimm einen fake suggestion service, gibt client zurück."""
 
     @asynccontextmanager
-    async def _make(fake_service: object):
+    async def _make(fake_service: object) -> AsyncGenerator[AsyncClient, None]:
         app = create_app()
         app.dependency_overrides[get_universe_repository] = lambda: in_memory_universe_repo
         app.dependency_overrides[get_universe_suggestion_service] = lambda: fake_service
@@ -219,7 +220,9 @@ async def make_client_with_suggest(
     return _make
 
 
-async def test_suggest_returns_200_with_valid_suggestion(make_client_with_suggest) -> None:
+async def test_suggest_returns_200_with_valid_suggestion(
+    make_client_with_suggest: Callable[[object], AsyncContextManager[AsyncClient]],
+) -> None:
     """Mit Mock-LLM gibt der Endpoint einen Vorschlag zurück."""
     fake_service = MagicMock(spec=UniverseSuggestionService)
     fake_service.suggest = AsyncMock(
@@ -245,7 +248,9 @@ async def test_suggest_returns_200_with_valid_suggestion(make_client_with_sugges
     assert body["available_tickers"] == ["AAPL", "MSFT", "GOOGL"]
 
 
-async def test_suggest_returns_422_for_short_description(make_client_with_suggest) -> None:
+async def test_suggest_returns_422_for_short_description(
+    make_client_with_suggest: Callable[[object], AsyncContextManager[AsyncClient]],
+) -> None:
     """Description < 3 chars wird abgelehnt."""
     fake_service = MagicMock(spec=UniverseSuggestionService)
     fake_service.suggest = AsyncMock(side_effect=AssertionError("Should not be called"))
@@ -259,7 +264,9 @@ async def test_suggest_returns_422_for_short_description(make_client_with_sugges
     assert response.status_code == 422
 
 
-async def test_suggest_returns_422_when_service_raises_empty(make_client_with_suggest) -> None:
+async def test_suggest_returns_422_when_service_raises_empty(
+    make_client_with_suggest: Callable[[object], AsyncContextManager[AsyncClient]],
+) -> None:
     """Wenn Service EmptySuggestion wirft → 422."""
     fake_service = MagicMock(spec=UniverseSuggestionService)
     fake_service.suggest = AsyncMock(side_effect=EmptySuggestion("Keine validen Tickers"))
