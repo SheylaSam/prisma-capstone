@@ -52,6 +52,7 @@ class _InMemoryStockService(StockService):
     async def get_by_ticker(self, ticker: str) -> Stock | None:
         return self._by_ticker.get(ticker.upper())
 
+
 pytestmark = pytest.mark.integration
 
 # ---------------------------------------------------------------------------
