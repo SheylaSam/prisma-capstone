@@ -4,11 +4,11 @@ import { render, screen } from '@testing-library/react';
 import { CompareBanner } from '../compare-banner';
 import type { RunResponse } from '@/lib/api/runs';
 
-function makeRun(id: string, name: string): RunResponse {
+function makeRun(id: string, name: string, universeId?: string): RunResponse {
   return {
     id,
     status: 'completed',
-    universe_id: `u-${id}`,
+    universe_id: universeId ?? `u-${id}`,
     universe_name: name,
     created_at: '2026-05-29T12:00:00Z',
   };
@@ -18,8 +18,8 @@ describe('<CompareBanner />', () => {
   it('shows both run headers', () => {
     render(
       <CompareBanner
-        runA={makeRun('a', 'Demo-US-5')}
-        runB={makeRun('b', 'Demo-US-5')}
+        runA={makeRun('a', 'Demo-US-5', 'u-shared')}
+        runB={makeRun('b', 'Demo-US-5', 'u-shared')}
         stats={{ commonCount: 5, onlyACount: 0, onlyBCount: 0 }}
       />,
     );
@@ -32,8 +32,8 @@ describe('<CompareBanner />', () => {
   it('shows only commonCount for same-universe comparison', () => {
     render(
       <CompareBanner
-        runA={makeRun('a', 'Demo-US-5')}
-        runB={makeRun('b', 'Demo-US-5')}
+        runA={makeRun('a', 'Demo-US-5', 'u-shared')}
+        runB={makeRun('b', 'Demo-US-5', 'u-shared')}
         stats={{ commonCount: 5, onlyACount: 0, onlyBCount: 0 }}
       />,
     );

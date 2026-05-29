@@ -16,8 +16,7 @@ interface Props {
 }
 
 export function CompareBanner({ runA, runB, stats }: Props) {
-  const sameUniverse =
-    runA.universe_id === runB.universe_id || runA.universe_name === runB.universe_name;
+  const sameUniverse = runA.universe_id === runB.universe_id;
 
   return (
     <Card>
