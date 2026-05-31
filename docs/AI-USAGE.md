@@ -117,6 +117,11 @@ Diese Sektion kondensiert wiederkehrende Lehren aus den Einträgen unten. Jeder 
 - **Evidenz**: PR #64 (Pydantic `string_too_long` auf `ranking_interpretation` mit `max_length=600`, Sonnet schreibt typisch 700-1000 Zeichen für 5-Modell-Interpretation. In Production wäre alles in Error-Memo-Pfad gewandert).
 - **Mitigation**: Vor dem ersten Production-Smoke einmal mit echten Inputs gegen das Modell laufen lassen, dann Schema-Constraints kalibrieren. Real-API-Smoke ist Acceptance, nicht Polish (Q4).
 
+#### A8. Required kwargs ohne Default in internen APIs unbemerkt vergessen
+**Interne Hilfsfunktionen mit required kwargs (kein Default)** werden beim ersten Aufrufer korrekt gesetzt, aber bei neuen Aufrufern oft vergessen — besonders wenn die Funktion viele optionale Kwargs hat.
+- **Evidenz**: PR #136 / Nacharbeit 2026-05-19 (`LLMClient.embed(feature=)` ist required, aber `RetrievalService.retrieve()` rief `embed()` ohne `feature=` auf — stiller TypeError zur Laufzeit, kein mypy-Fehler weil der Service selbst nicht vollständig getypt war).
+- **Mitigation**: (1) Neuen Aufrufer immer gegen die vollständige Methodensignatur der aufgerufenen Funktion gegenchecken. (2) Bei `mypy strict` wäre das sofort gefangen worden — Strict-Mypy zahlt sich aus. (3) Required kwargs in internen APIs als Code-Review-Checkliste aufnehmen.
+
 #### A9. session.merge() mit transientem Objekt hat dasselbe Identity-Map-Problem wie flush()+get()
 **`AsyncSession.merge(new_ORM_instance)` emittiert ein SELECT gegen die DB — pending (noch nicht committete) Rows werden nicht gesehen.** Ein zweiter `merge()` mit derselben PK erstellt ein zweites Pending-Objekt → `UniqueViolationError` beim Commit.
 - **Evidenz**: PR #131 Follow-up 2026-05-19 (zwei `test_save_twice_updates_instead_of_insert`-Tests, `test_ranking_run_repository` + `test_universe_repository`, knallten mit `asyncpg.UniqueViolationError` — beide Pending-Inserts hatten dieselbe UUID). Das Original-PR-Entry („nichts klappte") war voreilig — CI lief erst nach dem Merge.
@@ -126,11 +131,6 @@ Diese Sektion kondensiert wiederkehrende Lehren aus den Einträgen unten. Jeder 
 **Mit `trim_blocks=False` (Default) bleibt der Zeilenumbruch nach `{% endif %}` im Output.** Wird der Block nie betreten (falsy condition), kommt trotzdem ein `\n` aus dem `{% endif %}`-Tag. Ein Blank-Line vor dem `{% if %}`-Tag addiert sich — Ergebnis: 2 statt 1 Leerzeilen.
 - **Evidenz**: PR #139 2026-05-19 (`test_prompt_loader.py` snapshot-Tests: `AssertionError` weil Template mit `{% if rag_context %}` Block + Leerzeile davor 2 Leerzeilen produzierte, Snapshot erwartete 1).
 - **Mitigation**: (1) Blank-Line vor `{% if %}` entfernen — die `\n` aus dem `{% endif %}`-Tag gibt die einzige Trennzeile wenn Block falsy. (2) Oder `trim_blocks=True` in der Jinja2-Environment setzen. (3) Snapshot-Tests immer mit dem leeren Zustand (`rag_context=""`) verifizieren, nicht nur mit Inhalt.
-
-#### A8. Required kwargs ohne Default in internen APIs unbemerkt vergessen
-**Interne Hilfsfunktionen mit required kwargs (kein Default)** werden beim ersten Aufrufer korrekt gesetzt, aber bei neuen Aufrufern oft vergessen — besonders wenn die Funktion viele optionale Kwargs hat.
-- **Evidenz**: PR #136 / Nacharbeit 2026-05-19 (`LLMClient.embed(feature=)` ist required, aber `RetrievalService.retrieve()` rief `embed()` ohne `feature=` auf — stiller TypeError zur Laufzeit, kein mypy-Fehler weil der Service selbst nicht vollständig getypt war).
-- **Mitigation**: (1) Neuen Aufrufer immer gegen die vollständige Methodensignatur der aufgerufenen Funktion gegenchecken. (2) Bei `mypy strict` wäre das sofort gefangen worden — Strict-Mypy zahlt sich aus. (3) Required kwargs in internen APIs als Code-Review-Checkliste aufnehmen.
 
 ---
 
