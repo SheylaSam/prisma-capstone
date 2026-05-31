@@ -6,10 +6,12 @@ export interface RunResponse {
   id: string;
   status: RankingRunStatus;
   universe_id: string;
+  universe_name: string;
   created_at: string;
 }
 
 export interface RankingItem {
+  stock_id: string | null;  // null for legacy runs without stock_id in JSONB
   ticker: string;
   total_rank: number | null;
   weighted_avg: number | null;

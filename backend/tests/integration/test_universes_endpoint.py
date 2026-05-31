@@ -1,7 +1,8 @@
 """Integrationstests für /api/v1/universes gegen die Test-App mit InMemory-Repository."""
 
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
+from contextlib import AbstractAsyncContextManager as AsyncContextManager
 from uuid import UUID
 
 import pytest
@@ -233,3 +234,97 @@ async def test_sync_universe_ticker_count_invariant(http_client: AsyncClient) ->
     """synced_count + len(failed_tickers) == Anzahl Tickers im Universum (immer)."""
     body = (await http_client.post(f"/api/v1/universes/{_SMI_ID}/sync")).json()
     assert body["synced_count"] + len(body["failed_tickers"]) == 3  # SMI hat 3 Tickers
+
+
+# ---------------------------------------------------------------------------
+# Tests: POST /api/v1/universes/suggest
+# ---------------------------------------------------------------------------
+
+from contextlib import asynccontextmanager  # noqa: E402
+from unittest.mock import AsyncMock, MagicMock  # noqa: E402
+
+from backend.application.services.universe_suggestion_service import (  # noqa: E402
+    EmptySuggestion,
+    UniverseSuggestion,
+    UniverseSuggestionService,
+)
+from backend.interfaces.rest.dependencies import get_universe_suggestion_service  # noqa: E402
+
+
+@pytest_asyncio.fixture
+async def make_client_with_suggest(
+    in_memory_universe_repo: InMemoryUniverseRepository,
+) -> Callable[[object], AsyncContextManager[AsyncClient]]:
+    """Factory-Fixture: nimm einen fake suggestion service, gibt client zurück."""
+
+    @asynccontextmanager
+    async def _make(fake_service: object) -> AsyncGenerator[AsyncClient, None]:
+        app = create_app()
+        app.dependency_overrides[get_universe_repository] = lambda: in_memory_universe_repo
+        app.dependency_overrides[get_universe_suggestion_service] = lambda: fake_service
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            yield client
+
+    return _make
+
+
+async def test_suggest_returns_200_with_valid_suggestion(
+    make_client_with_suggest: Callable[[object], AsyncContextManager[AsyncClient]],
+) -> None:
+    """Mit Mock-LLM gibt der Endpoint einen Vorschlag zurück."""
+    fake_service = MagicMock(spec=UniverseSuggestionService)
+    fake_service.suggest = AsyncMock(
+        return_value=UniverseSuggestion(
+            name="Mock-Universe",
+            region="US",
+            tickers=["AAPL", "MSFT"],
+            reasoning="Test-Vorschlag mit zwei Tickern.",
+            available_tickers=["AAPL", "MSFT", "GOOGL"],
+        )
+    )
+
+    async with make_client_with_suggest(fake_service) as client:
+        response = await client.post(
+            "/api/v1/universes/suggest",
+            json={"description": "Tech-Heavy"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == "Mock-Universe"
+    assert body["tickers"] == ["AAPL", "MSFT"]
+    assert body["available_tickers"] == ["AAPL", "MSFT", "GOOGL"]
+
+
+async def test_suggest_returns_422_for_short_description(
+    make_client_with_suggest: Callable[[object], AsyncContextManager[AsyncClient]],
+) -> None:
+    """Description < 3 chars wird abgelehnt."""
+    fake_service = MagicMock(spec=UniverseSuggestionService)
+    fake_service.suggest = AsyncMock(side_effect=AssertionError("Should not be called"))
+
+    async with make_client_with_suggest(fake_service) as client:
+        response = await client.post(
+            "/api/v1/universes/suggest",
+            json={"description": "x"},
+        )
+
+    assert response.status_code == 422
+
+
+async def test_suggest_returns_422_when_service_raises_empty(
+    make_client_with_suggest: Callable[[object], AsyncContextManager[AsyncClient]],
+) -> None:
+    """Wenn Service EmptySuggestion wirft → 422."""
+    fake_service = MagicMock(spec=UniverseSuggestionService)
+    fake_service.suggest = AsyncMock(side_effect=EmptySuggestion("Keine validen Tickers"))
+
+    async with make_client_with_suggest(fake_service) as client:
+        response = await client.post(
+            "/api/v1/universes/suggest",
+            json={"description": "irgendwas"},
+        )
+
+    assert response.status_code == 422
+    assert "Keine validen Tickers" in response.json()["detail"]

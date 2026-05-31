@@ -37,19 +37,22 @@ class RunResponse(BaseModel):
     id: UUID
     status: RankingRunStatus
     universe_id: UUID
+    universe_name: str
     created_at: datetime
 
     @classmethod
-    def from_domain(cls, run: RankingRun) -> "RunResponse":
+    def from_domain(cls, run: RankingRun, universe_name: str) -> "RunResponse":
         return cls(
             id=run.id,
             status=run.status,
             universe_id=run.universe_id,
+            universe_name=universe_name,
             created_at=run.created_at,
         )
 
 
 class RankingItem(BaseModel):
+    stock_id: UUID | None = None
     ticker: str
     total_rank: int | None
     weighted_avg: float | None

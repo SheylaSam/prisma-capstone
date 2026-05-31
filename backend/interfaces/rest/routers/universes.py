@@ -5,11 +5,21 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.application.services.universe_service import UniverseNotFound, UniverseService
-from backend.interfaces.rest.dependencies import get_universe_service
+from backend.application.services.universe_suggestion_service import (
+    EmptySuggestion,
+    InvalidLLMOutput,
+    UniverseSuggestionService,
+)
+from backend.interfaces.rest.dependencies import (
+    get_universe_service,
+    get_universe_suggestion_service,
+)
 from backend.interfaces.rest.schemas.universe import (
     UniverseCreateRequest,
     UniverseListResponse,
     UniverseRead,
+    UniverseSuggestionRequest,
+    UniverseSuggestionResponse,
     UniverseSyncResponse,
 )
 
@@ -87,4 +97,28 @@ async def sync_universe(
         universe_id=result.universe_id,
         synced_count=result.synced_count,
         failed_tickers=result.failed_tickers,
+    )
+
+
+@router.post(
+    "/suggest",
+    response_model=UniverseSuggestionResponse,
+    summary="Universe-Vorschlag via Claude generieren",
+)
+async def suggest_universe(
+    request: UniverseSuggestionRequest,
+    service: UniverseSuggestionService = Depends(get_universe_suggestion_service),
+) -> UniverseSuggestionResponse:
+    try:
+        suggestion = await service.suggest(description=request.description)
+    except EmptySuggestion as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except InvalidLLMOutput as exc:
+        raise HTTPException(status_code=502, detail=f"LLM-Output ungültig: {exc}") from exc
+    return UniverseSuggestionResponse(
+        name=suggestion.name,
+        region=suggestion.region,
+        tickers=suggestion.tickers,
+        reasoning=suggestion.reasoning,
+        available_tickers=suggestion.available_tickers,
     )
