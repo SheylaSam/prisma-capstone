@@ -13,7 +13,7 @@ from backend.interfaces.rest.schemas.rag import (
 router = APIRouter(prefix="/api/v1/rag", tags=["RAG"])
 
 
-@router.post("/retrieve", response_model=RetrieveResponse)
+@router.post("/retrieve", response_model=RetrieveResponse, summary="Semantische Suche im RAG-Corpus (pgvector HNSW)")
 async def retrieve(
     request: RetrieveRequest,
     service: RetrievalService = Depends(get_retrieval_service),
