@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 
+import Link from 'next/link';
+
 import { Providers } from '@/app/providers';
 import { NavLinks } from '@/app/nav-links';
 import '@/app/globals.css';
@@ -31,12 +33,12 @@ export default function RootLayout({ children }: RootLayoutProps) {
         <Providers>
           <header className="sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <div className="container flex flex-col gap-2 py-2 sm:h-14 sm:flex-row sm:items-center sm:gap-0 sm:py-0">
-              <a
+              <Link
                 href="/"
                 className="flex items-center gap-2 font-bold tracking-tight text-foreground sm:mr-8"
               >
                 <span className="text-lg font-black uppercase tracking-widest">PRISMA</span>
-              </a>
+              </Link>
               <NavLinks />
             </div>
             {/* PRISMA-Spektrum: zerlegt weisses Licht in 5 quantitative Dimensionen */}

@@ -9,21 +9,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { listRuns, type RankingRunStatus, type RunResponse } from '@/lib/api/runs';
+import { listRuns, statusLabel, type RankingRunStatus, type RunResponse } from '@/lib/api/runs';
 
 const DATE_FMT = new Intl.DateTimeFormat('de-CH', {
   dateStyle: 'medium',
   timeStyle: 'short',
 });
 
-function statusLabel(status: RankingRunStatus): string {
-  switch (status) {
-    case 'completed': return 'Abgeschlossen';
-    case 'running':   return 'Läuft…';
-    case 'pending':   return 'Ausstehend';
-    case 'failed':    return 'Fehlgeschlagen';
-  }
-}
 
 function statusBadgeVariant(status: RankingRunStatus): 'default' | 'secondary' | 'destructive' | 'outline' {
   switch (status) {

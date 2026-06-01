@@ -6,21 +6,13 @@ import { XCircle, ArrowLeft, Loader2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { getRun, getRankings, type RankingRunStatus } from '@/lib/api/runs';
+import { getRun, getRankings, statusLabel } from '@/lib/api/runs';
 import { getUniverse } from '@/lib/api/universes';
 import { ApiError } from '@/lib/api/client';
 
 import { RankingsTable } from './rankings-table';
 import { TopTenLeaderboard } from '@/components/rankings/TopTenLeaderboard';
 
-function statusLabel(status: RankingRunStatus): string {
-  switch (status) {
-    case 'completed': return 'Abgeschlossen';
-    case 'running':   return 'Läuft…';
-    case 'pending':   return 'Ausstehend';
-    case 'failed':    return 'Fehlgeschlagen';
-  }
-}
 
 function TableSkeleton() {
   return (
