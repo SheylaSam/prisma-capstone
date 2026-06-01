@@ -166,6 +166,15 @@ LLM-Code mit StubClient grün ≠ production-ready. Mindestens 1× gegen echte A
 
 ## Einträge
 
+## 2026-06-01 · Code-Review + Fixes PR #160 (Universe → Ranking CTA)
+- **Agent**: Claude Code (Sonnet 4.6) — superpowers:review + inline Fixes
+- **Scope**: PR #160 (`feat/universe-ranking-cta`) reviewt und 3 Fixes direkt im Branch umgesetzt: (1) `universe!.id` Non-null Assertion durch expliziten Guard ersetzt (`if (!universe) throw`). (2) `mutation.reset()` beim Dialog-Schliessen ergänzt — verhindert Stale-Error bei erneutem Öffnen. (3) Fehlender Test für Loading-State hinzugefügt (beide Buttons disabled während Mutation pending). Danach CI abgewartet, Approval erteilt und Squash-Merge auf `main` durchgeführt.
+- **Was gut lief**: Review identifizierte 3 echte Issues (kein Noise), alle Fixes waren chirurgisch klein (2 Dateien, 18 Zeilen). CI war nach dem Fix-Commit sofort grün — kein E2E-Regressionsrisiko.
+- **Was nicht klappte**: Lokale Tests nicht ausführbar (node_modules nicht installiert im Checkout) — Fix-Korrektheit musste durch Code-Inspektion statt Testlauf verifiziert werden.
+- **Nachbearbeitung nötig bei**: Keine.
+- **Lektion**: **Code-Review + Fixes als eigenständige Session zahlt sich aus.** Die 3 Issues (non-null assertion, stale mutation state, fehlender Test) wären im normalen Merge-Flow durchgegangen — keiner davon wäre in CI aufgefallen. **`mutation.reset()` on dialog close ist ein Standard-Pattern** das bei jedem wiederverwendbaren Dialog-Component geprüft werden sollte.
+- **Autor**: Nicolas Lardinois (mit Claude Code)
+
 ## 2026-06-01 · UX-Polish — Nav-Highlight, Deutsche Labels, Spinner, URL-Preselect (PR #161)
 - **Agent**: Claude Code (Sonnet 4.6) — superpowers:brainstorming + writing-plans + subagent-driven-development
 - **Scope**: 5 kleine UX-Verbesserungen in 4 Subagent-Tasks: (1) `NavLinks`-Client-Component mit `usePathname()` + `aria-current="page"` für aktiven Tab; (2) Deutsche Status-Labels in `RunHistoryList` ("Abgeschlossen", "Ausstehend", "Läuft…", "Fehlgeschlagen") + "Date"→"Datum"; (3) `Loader2`-Spinner bei laufendem Run + "Neuer Run"→"Zurück zu Rankings" in Detail-Page; (4) `RankingsForm` liest `?universeId=` aus URL + `<Suspense>`-Grenze in `rankings/page.tsx`. 6 neue Tests.
