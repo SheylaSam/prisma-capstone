@@ -16,7 +16,7 @@ Pro PR mit substantieller Agent-Beteiligung ein Eintrag:
 - **Autor**: <Teammitglied>
 ```
 
-## Patterns (extrahiert aus 14 Einträgen, Stand 2026-05-10)
+## Patterns (extrahiert aus 52 Einträgen, Stand 2026-06-01)
 
 Diese Sektion kondensiert wiederkehrende Lehren aus den Einträgen unten. Jeder Pattern verlinkt auf die Einträge mit konkreter Evidenz, damit der Pattern-Claim verifizierbar bleibt — nicht aus dem Bauch, sondern aus tatsächlich gemachten Erfahrungen.
 
