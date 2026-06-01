@@ -16,15 +16,21 @@ const DATE_FMT = new Intl.DateTimeFormat('de-CH', {
   timeStyle: 'short',
 });
 
+function statusLabel(status: RankingRunStatus): string {
+  switch (status) {
+    case 'completed': return 'Abgeschlossen';
+    case 'running':   return 'Läuft…';
+    case 'pending':   return 'Ausstehend';
+    case 'failed':    return 'Fehlgeschlagen';
+  }
+}
+
 function statusBadgeVariant(status: RankingRunStatus): 'default' | 'secondary' | 'destructive' | 'outline' {
   switch (status) {
-    case 'completed':
-      return 'default';
+    case 'completed': return 'default';
     case 'running':
-    case 'pending':
-      return 'secondary';
-    case 'failed':
-      return 'destructive';
+    case 'pending':   return 'secondary';
+    case 'failed':    return 'destructive';
   }
 }
 
@@ -39,12 +45,8 @@ export function RunHistoryList() {
 
   function toggle(runId: string) {
     setSelected((prev) => {
-      if (prev.includes(runId)) {
-        return prev.filter((id) => id !== runId);
-      }
-      if (prev.length < 2) {
-        return [...prev, runId];
-      }
+      if (prev.includes(runId)) return prev.filter((id) => id !== runId);
+      if (prev.length < 2) return [...prev, runId];
       return [prev[1], runId];
     });
   }
@@ -87,10 +89,10 @@ export function RunHistoryList() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10"></TableHead>
-                <TableHead>Date</TableHead>
+                <TableHead>Datum</TableHead>
                 <TableHead>Universe</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-20 text-right">Action</TableHead>
+                <TableHead className="w-20 text-right">Aktion</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -113,7 +115,9 @@ export function RunHistoryList() {
                     </TableCell>
                     <TableCell className="text-sm font-medium">{run.universe_name}</TableCell>
                     <TableCell>
-                      <Badge variant={statusBadgeVariant(run.status)}>{run.status}</Badge>
+                      <Badge variant={statusBadgeVariant(run.status)}>
+                        {statusLabel(run.status)}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <Link
