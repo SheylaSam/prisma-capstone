@@ -24,7 +24,10 @@ export function StartRankingDialog({ universe, onClose }: Props) {
   const router = useRouter();
 
   const mutation = useMutation({
-    mutationFn: () => createRun(universe!.id),
+    mutationFn: () => {
+      if (!universe) throw new Error('Kein Universe ausgewählt');
+      return createRun(universe.id);
+    },
     onSuccess: (run) => router.push(`/rankings/${run.id}`),
   });
 
@@ -32,7 +35,10 @@ export function StartRankingDialog({ universe, onClose }: Props) {
     <Dialog
       open={universe !== null}
       onOpenChange={(open) => {
-        if (!open && !mutation.isPending) onClose();
+        if (!open && !mutation.isPending) {
+          mutation.reset();
+          onClose();
+        }
       }}
     >
       <DialogContent>

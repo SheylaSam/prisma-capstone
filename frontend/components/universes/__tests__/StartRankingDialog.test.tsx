@@ -73,4 +73,14 @@ describe('StartRankingDialog', () => {
       expect(screen.getByText(/Backend nicht erreichbar/)).toBeInTheDocument()
     );
   });
+
+  it('Ja-Button ist disabled und zeigt Spinner während Mutation läuft', async () => {
+    mockCreateRun.mockImplementation(() => new Promise(() => {})); // never resolves
+    renderDialog({ id: 'u-1', name: 'SMI' });
+    fireEvent.click(screen.getByRole('button', { name: /Ja/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Ja/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /Nein/i })).toBeDisabled();
+    });
+  });
 });
