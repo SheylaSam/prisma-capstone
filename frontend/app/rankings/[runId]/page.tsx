@@ -2,16 +2,25 @@
 
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { XCircle, ArrowLeft } from 'lucide-react';
+import { XCircle, ArrowLeft, Loader2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { getRun, getRankings } from '@/lib/api/runs';
+import { getRun, getRankings, type RankingRunStatus } from '@/lib/api/runs';
 import { getUniverse } from '@/lib/api/universes';
 import { ApiError } from '@/lib/api/client';
 
 import { RankingsTable } from './rankings-table';
 import { TopTenLeaderboard } from '@/components/rankings/TopTenLeaderboard';
+
+function statusLabel(status: RankingRunStatus): string {
+  switch (status) {
+    case 'completed': return 'Abgeschlossen';
+    case 'running':   return 'Läuft…';
+    case 'pending':   return 'Ausstehend';
+    case 'failed':    return 'Fehlgeschlagen';
+  }
+}
 
 function TableSkeleton() {
   return (
@@ -56,9 +65,12 @@ export default function RankingDetailPage({ params }: { params: { runId: string 
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <Link href="/rankings" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
+        <Link
+          href="/rankings"
+          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+        >
           <ArrowLeft className="mr-1 h-4 w-4" />
-          Neuer Run
+          Zurück zu Rankings
         </Link>
         <h1 className="text-2xl font-bold tracking-tight">Ranking-Ergebnis</h1>
       </div>
@@ -88,7 +100,7 @@ export default function RankingDetailPage({ params }: { params: { runId: string 
                     : 'secondary'
               }
             >
-              {runQuery.data.status}
+              {statusLabel(runQuery.data.status)}
             </Badge>
             <span className="text-muted-foreground">
               {new Date(runQuery.data.created_at).toLocaleString('de-CH')}
@@ -99,6 +111,7 @@ export default function RankingDetailPage({ params }: { params: { runId: string 
 
       {(runQuery.data?.status === 'pending' || runQuery.data?.status === 'running') && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
+          <Loader2 className="h-4 w-4 animate-spin shrink-0" />
           <span>Run läuft noch. Seite aktualisiert sich alle 5s.</span>
         </div>
       )}
